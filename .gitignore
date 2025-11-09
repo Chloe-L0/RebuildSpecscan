@@ -1,0 +1,60 @@
+# ================================
+# 📦 Node.js / Frontend App .gitignore
+# ================================
+
+# --- Dependencies ---
+node_modules/
+package-lock.json
+# If using Yarn, comment out the line above and uncomment below
+# yarn.lock
+
+# --- Environment Variables ---
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# --- Build Artifacts ---
+dist/
+build/
+.out/
+.cache/
+.next/
+coverage/
+tmp/
+temp/
+
+# --- Logs ---
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# --- OS Files ---
+.DS_Store
+Thumbs.db
+
+# --- IDE / Editor Settings ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# --- Misc ---
+*.tgz
+*.tmp
+*.bak
+
+# --- Optional: lock or deployment files ---
+# vercel/
+# netlify/
+# .firebase/
+# .expo/
+
+# --- Optional: testing or linting cache ---
+jest-cache/
+eslintcache
