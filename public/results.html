@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airplane Inspection · Results</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <span class="badge">SpecScan</span>
+        <h1>Airplane Inspection Console</h1>
+        <p>Guide a technician through area selection, capture or upload images, and visualize AI detected defects directly in the browser.</p>
+    </header>
+
+    <main>
+        <section>
+            <div class="results-shell">
+                <div class="status-banner" id="statusBanner">Awaiting analysis…</div>
+
+                <div class="loading" id="loadingState">
+                    <div class="spinner"></div>
+                    <p>Running inference with Roboflow…</p>
+                </div>
+
+                <div id="resultsContent" class="hidden">
+                    <div class="results-body">
+                        <div class="canvas-card">
+                            <div class="nav-bar">
+                                <div class="nav-group">
+                                    <button class="nav-btn" id="prevBtn">Previous</button>
+                                    <button class="nav-btn" id="nextBtn">Next</button>
+                                </div>
+                                <div class="meta" id="imageMeta"></div>
+                            </div>
+                            <div class="image-stage">
+                                <img id="resultImage" alt="Inspection result">
+                                <div id="overlayLayer"></div>
+                            </div>
+                            <div class="tools">
+                                <label for="thresholdSlider">Confidence filter</label>
+                                <div>
+                                    <input type="range" id="thresholdSlider" min="0" max="100" value="50">
+                                    <span id="thresholdValue">50%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="list-card">
+                            <h3>Detections</h3>
+                            <div class="list" id="detectionList"></div>
+                            <div class="empty-state hidden" id="emptyState">No detections above the current confidence threshold.</div>
+                            <div class="actions">
+                                <button id="newSessionBtn">Inspect Another Area</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="results.js" type="module"></script>
+</body>
+</html>
+
