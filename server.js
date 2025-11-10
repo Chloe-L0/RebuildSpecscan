@@ -42,10 +42,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Serve uiImage directory for plane illustration
 app.use('/uiImage', express.static(path.join(__dirname, '../uiImage')));
 
+// Serve aircraft assets
+app.use('/assets', express.static(path.join(__dirname, 'Assets')));
+
 const sendPublicFile = (res, fileName) =>
     res.sendFile(path.join(__dirname, 'public', fileName));
 
 app.get(['/', '/start'], (req, res) => sendPublicFile(res, 'index.html'));
+app.get('/3dplane', (req, res) => sendPublicFile(res, '3Dplane.html'));
 app.get('/capture', (req, res) => sendPublicFile(res, 'capture.html'));
 app.get('/tag', (req, res) => sendPublicFile(res, 'tag.html'));
 app.get('/results', (req, res) => sendPublicFile(res, 'results.html'));

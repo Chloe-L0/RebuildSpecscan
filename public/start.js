@@ -48,7 +48,7 @@ const handleStart = () => {
     };
 
     setInspectionDetails(payload);
-    window.location.href = 'capture.html';
+    window.location.href = '3Dplane.html';
 };
 
 startButton?.addEventListener('click', handleStart);

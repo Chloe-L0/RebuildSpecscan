@@ -966,3 +966,12 @@ input[type="range"] {
     font-size: 16px;
 }
 
+.plane-viewer {
+    width: 100%;
+    height: clamp(420px, 65vh, 720px);
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(16, 18, 26, 0.08);
+    background: #bfbfbf;
+    box-shadow: 0 16px 38px rgba(16, 18, 26, 0.12);
+}
+

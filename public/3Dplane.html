@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpecScan · Aircraft Orientation</title>
+    <link rel="stylesheet" href="styles.css">
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+</head>
+<body data-step="2">
+    <header class="app-header">
+        <div class="brand">
+            <span class="badge">SpecScan</span>
+            <h1>Airplane Inspection Console</h1>
+        </div>
+        <div class="step-indicator">
+            <span class="step-label">Step 2 of 7</span>
+            <span class="step-name">Review Airframe</span>
+        </div>
+    </header>
+
+    <main class="shell">
+        <section class="card">
+            <div class="card-header">
+                <h2>Inspect Aircraft Orientation</h2>
+                <p>Rotate, pan, and zoom the model to review the airframe before capturing imagery.</p>
+            </div>
+
+            <model-viewer
+                id="aircraftViewer"
+                class="plane-viewer"
+                src="/assets/plane.glb"
+                camera-controls
+                interaction-prompt="none"
+                auto-rotate="false"
+                exposure="1.0"
+                shadow-intensity="0.25"
+                camera-orbit="40deg 75deg 5m"
+                min-camera-orbit="auto 35deg 2m"
+                max-camera-orbit="auto 100deg 9m"
+                field-of-view="5deg"
+                interpolation-decay="200"
+                tone-mapping="neutral"
+                ar="false">
+            </model-viewer>
+
+            <footer class="card-footer">
+                <div class="button-row">
+                    <button class="secondary" id="backBtn">Back</button>
+                    <button class="primary" id="nextBtn">Next</button>
+                </div>
+            </footer>
+        </section>
+    </main>
+
+    <script type="module" src="state.js"></script>
+    <script type="module" src="3Dplane.js"></script>
+</body>
+</html>
