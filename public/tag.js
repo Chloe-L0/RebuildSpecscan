@@ -10,43 +10,12 @@ const tagProgress = document.getElementById('tagProgress');
 const tagSummary = document.getElementById('tagSummary');
 const backBtn = document.getElementById('backBtn');
 const nextBtn = document.getElementById('nextBtn');
-const areaViewer = document.getElementById('areaViewer');
+const hotspotToolbar = document.getElementById('hotspotToolbar');
+const hotspotButtons = hotspotToolbar ? Array.from(hotspotToolbar.querySelectorAll('.area-hotspot')) : [];
 
 const SELECTED_AREA_KEY = 'selectedArea';
+
 const selected = new Set();
-let areaHotspots = [];
-
-// Debug: Log when model-viewer is ready
-if (areaViewer) {
-    areaViewer.addEventListener('load', () => {
-        console.log('✓ Model loaded successfully');
-        // Re-query hotspots after model loads
-        areaHotspots = Array.from(areaViewer.querySelectorAll('.area-hotspot'));
-        console.log(`✓ Found ${areaHotspots.length} hotspots`);
-        
-        // Attach event listeners to hotspots
-        areaHotspots.forEach((hotspot, index) => {
-            console.log(`Hotspot ${index + 1}:`, hotspot.dataset.area);
-            hotspot.addEventListener('click', () => {
-                const { area } = hotspot.dataset;
-                if (!area) return;
-                handleAreaSelection(area);
-            });
-        });
-        
-        // Restore active state if needed
-        const storedArea = sessionStorage.getItem(SELECTED_AREA_KEY);
-        if (storedArea) {
-            setActiveHotspots(storedArea);
-        }
-    });
-
-    areaViewer.addEventListener('error', (event) => {
-        console.error('✗ Model failed to load:', event);
-    });
-} else {
-    console.error('✗ areaViewer element not found');
-}
 
 const ensurePhotos = () => {
     const state = readState();
@@ -73,13 +42,24 @@ const updateSelectionMeta = () => {
     const count = selected.size;
     selectionMeta.textContent =
         count === 0 ? '0 photos selected' : `${count} photo${count === 1 ? '' : 's'} selected`;
-    const disableAssign = count === 0;
-    if (clearTagsBtn) {
-        clearTagsBtn.disabled = disableAssign;
-    }
-    if (clearSelectionBtn) {
-        clearSelectionBtn.disabled = disableAssign;
-    }
+    const disableActions = count === 0;
+    if (clearTagsBtn) clearTagsBtn.disabled = disableActions;
+    if (clearSelectionBtn) clearSelectionBtn.disabled = disableActions;
+};
+
+const setActiveHotspots = (area) => {
+    hotspotButtons.forEach((button) => {
+        const isActive = button.dataset.area === area;
+        button.classList.toggle('active', isActive);
+        button.setAttribute('aria-pressed', String(isActive));
+    });
+};
+
+const updateNextButton = () => {
+    if (!nextBtn) return;
+    const storedArea = sessionStorage.getItem(SELECTED_AREA_KEY);
+    nextBtn.disabled = !storedArea;
+    nextBtn.setAttribute('aria-disabled', String(!storedArea));
 };
 
 const toggleSelection = (photoId, forceState) => {
@@ -166,24 +146,7 @@ const handleClearTags = () => {
     renderPhotos();
 };
 
-const setActiveHotspots = (area) => {
-    areaHotspots.forEach((button) => {
-        if (button.dataset.area === area) {
-            button.classList.add('active');
-        } else {
-            button.classList.remove('active');
-        }
-    });
-};
-
-const updateNextButton = () => {
-    if (!nextBtn) return;
-    const storedArea = sessionStorage.getItem(SELECTED_AREA_KEY);
-    nextBtn.disabled = !storedArea;
-};
-
 const handleAreaSelection = (area) => {
-    console.log('Area selected:', area);
     sessionStorage.setItem(SELECTED_AREA_KEY, area);
     setActiveHotspots(area);
     updateNextButton();
@@ -192,7 +155,14 @@ const handleAreaSelection = (area) => {
     }
 };
 
-// Event listeners
+hotspotButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        const { area } = button.dataset;
+        if (!area) return;
+        handleAreaSelection(area);
+    });
+});
+
 selectAllBtn?.addEventListener('click', () => {
     const state = readState();
     selected.clear();
@@ -215,13 +185,27 @@ backBtn?.addEventListener('click', () => {
 
 nextBtn?.addEventListener('click', () => {
     const area = sessionStorage.getItem(SELECTED_AREA_KEY);
-    if (!area) return;
-    window.location.href = 'capture.html';
+    if (!area) {
+        alert('Select an inspection area before continuing.');
+        return;
+    }
+    const state = readState();
+    const unassigned = state.photos.filter((photo) => !photo.area);
+    if (unassigned.length) {
+        alert(`Assign an area to all photos before continuing. ${unassigned.length} photo${unassigned.length === 1 ? '' : 's'} still unassigned.`);
+        return;
+    }
+    window.location.href = 'results.html';
 });
 
-// Initialize
 const initialState = ensurePhotos();
 if (initialState) {
     renderPhotos();
 }
+
+const storedArea = sessionStorage.getItem(SELECTED_AREA_KEY);
+if (storedArea) {
+    setActiveHotspots(storedArea);
+}
 updateNextButton();
+
