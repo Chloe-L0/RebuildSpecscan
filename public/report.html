@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airplane Inspection · Report</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <small>SpecScan</small>
+        <h1>Airplane Inspection Console</h1>
+        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+    </header>
+
+    <main>
+        <div class="page-shell">
+            <section class="panel">
+                <div class="step-header">
+                    <span class="step-indicator">Step 5 of 5</span>
+                    <h2>Final Report</h2>
+                    <p class="muted">Review inspection highlights, choose export options, and submit the inspection for archival.</p>
+                </div>
+
+                <div class="summary-grid" id="summaryGrid"></div>
+
+                <div class="report-preview" id="reportPreview"></div>
+
+                <div class="panel">
+                    <h3>Export Options</h3>
+                    <div class="option-group">
+                        <div class="helper">Choose export format</div>
+                        <div class="option-row">
+                            <input type="radio" name="exportFormat" id="exportPdf" value="PDF" checked>
+                            <label for="exportPdf">PDF</label>
+                        </div>
+                        <div class="option-row">
+                            <input type="radio" name="exportFormat" id="exportJson" value="JSON">
+                            <label for="exportJson">JSON</label>
+                        </div>
+                        <div class="option-row">
+                            <input type="radio" name="exportFormat" id="exportBoth" value="Both">
+                            <label for="exportBoth">Both</label>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="option-group">
+                        <div class="option-row">
+                            <input type="checkbox" id="includeFalsePositives" checked>
+                            <label for="includeFalsePositives">Include false-positive detections</label>
+                        </div>
+                        <div class="option-row">
+                            <input type="checkbox" id="includeAllPhotos" checked>
+                            <label for="includeAllPhotos">Include all photos in appendix</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="page-actions">
+                    <button class="btn ghost" id="backToResultsBtn" type="button">Back to Results</button>
+                    <div class="page-actions-right">
+                        <button class="btn" id="downloadBtn" type="button">Download Report</button>
+                        <button class="btn primary" id="submitBtn" type="button">Submit Inspection</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="report.js" type="module"></script>
+</body>
+</html>
+

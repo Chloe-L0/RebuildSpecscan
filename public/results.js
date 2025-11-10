@@ -1,345 +1,309 @@
-const STORAGE_KEY = 'specscanInspection';
+import {
+    loadState,
+    setDetections,
+    toggleFalsePositive
+} from './state.js';
 
-const statusBanner = document.getElementById('statusBanner');
-const loadingState = document.getElementById('loadingState');
-const resultsContent = document.getElementById('resultsContent');
+const areaTabs = document.getElementById('areaTabs');
 const resultImage = document.getElementById('resultImage');
 const overlayLayer = document.getElementById('overlayLayer');
-const detectionList = document.getElementById('detectionList');
-const emptyState = document.getElementById('emptyState');
+const imageMeta = document.getElementById('imageMeta');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
-const imageMeta = document.getElementById('imageMeta');
-const thresholdSlider = document.getElementById('thresholdSlider');
-const thresholdValue = document.getElementById('thresholdValue');
-const newSessionBtn = document.getElementById('newSessionBtn');
+const slider = document.getElementById('confidenceSlider');
+const sliderValue = document.getElementById('confidenceValue');
+const detectionSummary = document.getElementById('detectionSummary');
+const detectionsList = document.getElementById('detectionsList');
+const emptyState = document.getElementById('emptyState');
+const reorganizeBtn = document.getElementById('reorganizeBtn');
+const continueReportBtn = document.getElementById('continueReportBtn');
+const saveDraftBtn = document.getElementById('saveDraftBtn');
 
-const state = {
-    area: null,
-    previews: [],
-    results: [],
-    currentIndex: 0,
-    threshold: 0.5
-};
+let state = loadState();
 
-init();
+if (!state.start) {
+    window.location.href = 'index.html';
+}
 
-function init() {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-        redirectToWizard();
-        return;
-    }
+if (state.photos.length === 0) {
+    window.location.href = 'capture.html';
+}
 
-    let parsed;
-    try {
-        parsed = JSON.parse(raw);
-    } catch (error) {
-        console.error('Failed to parse session payload', error);
-        sessionStorage.removeItem(STORAGE_KEY);
-        redirectToWizard();
-        return;
-    }
-
-    if (!parsed?.area || !Array.isArray(parsed.files) || !parsed.files.length) {
-        redirectToWizard();
-        return;
-    }
-
-    state.area = parsed.area;
-    state.previews = parsed.files;
-    state.threshold = typeof parsed.threshold === 'number' ? parsed.threshold : 0.5;
-    state.currentIndex = typeof parsed.currentIndex === 'number' ? parsed.currentIndex : 0;
-
-    thresholdSlider.value = String(Math.round(state.threshold * 100));
-    thresholdValue.textContent = `${Math.round(state.threshold * 100)}%`;
-
-    if (Array.isArray(parsed.results) && parsed.results.length) {
-        state.results = normalizeResults(parsed.results);
-        state.currentIndex = clamp(state.currentIndex, 0, state.results.length - 1);
-        const totalDetections = state.results.reduce((sum, result) => sum + (result.predictions?.length || 0), 0);
-        statusBanner.textContent = `Analysis complete · ${totalDetections} detection(s) across ${state.results.length} image(s).`;
-        statusBanner.classList.remove('error');
-        toggleLoading(false);
-        resultsContent?.classList.remove('hidden');
-        renderCurrentImage();
+if (!state.detections.length) {
+    const tagged = state.photos.filter(photo => photo.area);
+    if (tagged.length) {
+        const detections = generateDetections(tagged);
+        const firstArea = detections[0]?.area ?? null;
+        state = setDetections(detections, firstArea);
     } else {
-        analyzeImages();
+        window.location.href = 'tag.html';
     }
 }
 
-function normalizeResults(results) {
-    return results.map((result, index) => {
-        const predictions = (result.predictions || []).map((prediction, idx) => ({
-            ...prediction,
-            imageIndex: typeof prediction.imageIndex === 'number' ? prediction.imageIndex : index,
-            id: prediction.id || `${index}-${idx}`
-        }));
+let currentArea = state.areaView || 'All';
+const availableAreas = new Set(state.detections.map(det => det.area));
+if (!availableAreas.has(currentArea) && currentArea !== 'All') {
+    currentArea = 'All';
+}
 
+let threshold = 0.5;
+let currentPhotoIndex = 0;
+
+sliderValue.textContent = `${slider.value}%`;
+
+renderAreaTabs();
+renderView();
+renderDetections();
+updateNavigation();
+updateSummary();
+
+areaTabs?.addEventListener('click', (event) => {
+    const tab = event.target.closest('[data-area]');
+    if (!tab) return;
+    currentArea = tab.dataset.area;
+    currentPhotoIndex = 0;
+    renderAreaTabs();
+    renderView();
+    renderDetections();
+    updateNavigation();
+    updateSummary();
+});
+
+slider?.addEventListener('input', (event) => {
+    const value = Number(event.target.value);
+    sliderValue.textContent = `${value}%`;
+    threshold = value / 100;
+    renderView();
+    renderDetections();
+    updateSummary();
+});
+
+prevBtn?.addEventListener('click', () => {
+    const photos = filteredPhotos();
+    if (currentPhotoIndex > 0) {
+        currentPhotoIndex -= 1;
+        renderView();
+        updateNavigation();
+    }
+});
+
+nextBtn?.addEventListener('click', () => {
+    const photos = filteredPhotos();
+    if (currentPhotoIndex < photos.length - 1) {
+        currentPhotoIndex += 1;
+        renderView();
+        updateNavigation();
+    }
+});
+
+reorganizeBtn?.addEventListener('click', () => {
+    window.location.href = 'tag.html';
+});
+
+continueReportBtn?.addEventListener('click', () => {
+    window.location.href = 'report.html';
+});
+
+saveDraftBtn?.addEventListener('click', () => {
+    saveDraftBtn.textContent = 'Draft Saved';
+    saveDraftBtn.disabled = true;
+    setTimeout(() => {
+        saveDraftBtn.textContent = 'Save Draft';
+        saveDraftBtn.disabled = false;
+    }, 1500);
+});
+
+window.addEventListener('resize', debounce(() => {
+    renderView();
+}, 120));
+
+function renderAreaTabs() {
+    const counts = areaCounts();
+    areaTabs.innerHTML = '';
+    const areas = ['All', ...Array.from(counts.keys()).filter(area => area !== 'All')];
+    areas.forEach((area) => {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = 'tab';
+        if (area === currentArea) {
+            tab.classList.add('active');
+            tab.setAttribute('aria-selected', 'true');
+        }
+        tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-controls', 'detectionsList');
+        tab.dataset.area = area;
+        const badge = counts.get(area) ?? 0;
+        tab.innerHTML = `
+            <span>${area}</span>
+            <span class="badge">${badge}</span>
+        `;
+        areaTabs.appendChild(tab);
+    });
+}
+
+function renderView() {
+    const photos = filteredPhotos();
+    const detections = filteredDetections();
+
+    if (!photos.length) {
+        resultImage.removeAttribute('src');
+        resultImage.setAttribute('alt', 'No photo available');
+        imageMeta.textContent = 'No photos for this area';
+        overlayLayer.innerHTML = '';
+        return;
+    }
+
+    const photo = photos[currentPhotoIndex] || photos[0];
+    imageMeta.textContent = `Photo ${photo.number} · ${photo.name}`;
+    const src = photo.dataURL || buildPlaceholderImage(photo);
+    resultImage.src = src;
+    resultImage.alt = `Inspection photo ${photo.name}`;
+    drawOverlay(photo, detections.filter(det => det.photoId === photo.id));
+}
+
+function renderDetections() {
+    detectionsList.innerHTML = '';
+    const detections = filteredDetections();
+
+    if (!detections.length) {
+        emptyState.classList.remove('hidden');
+        return;
+    }
+    emptyState.classList.add('hidden');
+
+    detections.forEach((detection) => {
+        const card = document.createElement('div');
+        card.className = 'detection-card';
+        if (state.falsePositives.includes(detection.id)) {
+            card.classList.add('muted');
+        }
+        card.innerHTML = `
+            <div class="detection-header">
+                <strong>${detection.type}</strong>
+                <button class="toggle-flag" type="button">${state.falsePositives.includes(detection.id) ? 'Undo Flag' : 'Mark False Positive'}</button>
+            </div>
+            <div class="helper">Confidence ${Math.round(detection.confidence * 100)}% · Photo ${detection.photoNumber} · ${detection.area}</div>
+        `;
+
+        card.querySelector('.toggle-flag')?.addEventListener('click', () => {
+            state = toggleFalsePositive(detection.id);
+            renderDetections();
+            renderView();
+            updateSummary();
+        });
+
+        detectionsList.appendChild(card);
+    });
+}
+
+function updateNavigation() {
+    const photos = filteredPhotos();
+    prevBtn.disabled = currentPhotoIndex === 0;
+    nextBtn.disabled = currentPhotoIndex >= photos.length - 1;
+}
+
+function updateSummary() {
+    const detections = filteredDetections();
+    detectionSummary.textContent = `${detections.length} detection${detections.length === 1 ? '' : 's'} visible`;
+}
+
+function filteredPhotos() {
+    const relevant = currentArea === 'All'
+        ? state.photos
+        : state.photos.filter(photo => photo.area === currentArea);
+    return relevant.length ? relevant : state.photos;
+}
+
+function filteredDetections() {
+    return state.detections.filter((det) => {
+        const areaMatch = currentArea === 'All' || det.area === currentArea;
+        const confidenceMatch = det.confidence >= threshold;
+        return areaMatch && confidenceMatch;
+    });
+}
+
+function areaCounts() {
+    const counts = new Map();
+    state.detections.forEach((det) => {
+        counts.set(det.area, (counts.get(det.area) || 0) + 1);
+    });
+    const total = Array.from(counts.values()).reduce((sum, value) => sum + value, 0);
+    counts.set('All', total);
+    return counts;
+}
+
+function generateDetections(taggedPhotos) {
+    const typesByArea = {
+        'Fuselage': ['Rivet Crack', 'Loose Panel', 'Corrosion'],
+        'Left Wing': ['Surface Dent', 'Fastener Out', 'Fuel Stain'],
+        'Right Wing': ['Surface Dent', 'Fastener Out', 'Fuel Stain'],
+        'Tail': ['Control Surface Wear', 'Sealant Voids'],
+        'Landing Gear': ['Hydraulic Leak', 'Wear Indicator'],
+        'Engines': ['Oil Residue', 'Blade Nick', 'Exhaust Soot']
+    };
+
+    return taggedPhotos.map((photo, index) => {
+        const pool = typesByArea[photo.area] || ['Defect'];
         return {
-            imageIndex: typeof result.imageIndex === 'number' ? result.imageIndex : index,
-            filename: result.filename || state.previews[index]?.name || `image_${index + 1}`,
-            predictions,
-            imageSize: result.imageSize || { w: null, h: null }
+            id: `${photo.id}-${index}`,
+            photoId: photo.id,
+            photoNumber: photo.number,
+            area: photo.area,
+            type: pool[index % pool.length],
+            confidence: Math.round((0.6 + Math.random() * 0.35) * 100) / 100
         };
     });
 }
 
-async function analyzeImages() {
-    if (!state.area || !state.previews.length) {
-        redirectToWizard();
-        return;
-    }
-
-    toggleLoading(true);
-    resultsContent?.classList.add('hidden');
-    statusBanner?.classList.remove('error');
-    statusBanner.textContent = 'Running image analysis…';
-
-    const aggregatedResults = [];
-
-    try {
-        for (let index = 0; index < state.previews.length; index += 1) {
-            const preview = state.previews[index];
-            const file = dataURLToFile(preview.dataURL, preview.name, preview.type);
-            const formData = new FormData();
-            formData.append('area', state.area);
-            formData.append('image', file, preview.name);
-
-            const response = await fetch('/api/analyze', {
-                method: 'POST',
-                body: formData
-            });
-
-            const payload = await response.json();
-            if (!response.ok) {
-                throw new Error(payload.error || `Unexpected error (${response.status})`);
-            }
-
-            const predictions = (payload.predictions || []).map((prediction, idx) => ({
-                ...prediction,
-                imageIndex: index,
-                id: `${index}-${idx}`
-            }));
-
-            aggregatedResults.push({
-                imageIndex: index,
-                filename: preview.name,
-                predictions,
-                imageSize: payload.imageSize || { w: null, h: null }
-            });
-        }
-
-        state.results = aggregatedResults;
-        state.currentIndex = 0;
-        state.threshold = 0.5;
-        thresholdSlider.value = '50';
-        thresholdValue.textContent = '50%';
-
-        const totalDetections = state.results.reduce((sum, result) => sum + (result.predictions?.length || 0), 0);
-        statusBanner.textContent = `Analysis complete · ${totalDetections} detection(s) across ${state.results.length} image(s).`;
-        toggleLoading(false);
-        resultsContent?.classList.remove('hidden');
-        renderCurrentImage();
-        persistSession();
-    } catch (error) {
-        console.error('Analysis error', error);
-        statusBanner.textContent = error.message || 'Analysis failed';
-        statusBanner?.classList.add('error');
-        toggleLoading(false);
-        resultsContent?.classList.add('hidden');
-    }
+function buildPlaceholderImage(photo) {
+    const width = 800;
+    const height = 520;
+    const background = 'f5f5f7';
+    const text = encodeURIComponent(`Photo ${photo.number}`);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+        <rect width="100%" height="100%" fill="#${background}"/>
+        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="48" fill="#1b1e2b" opacity="0.45">${text}</text>
+    </svg>`;
+    return `data:image/svg+xml,${svg}`;
 }
 
-function dataURLToFile(dataURL, fileName, preferredType) {
-    if (!dataURL.startsWith('data:')) {
-        throw new Error('Invalid image data');
-    }
-
-    const [meta, content] = dataURL.split(',');
-    const mimeMatch = /data:(.*?);base64/.exec(meta);
-    const mimeType = preferredType || (mimeMatch ? mimeMatch[1] : 'image/jpeg');
-    const binary = atob(content);
-    const buffer = new Uint8Array(binary.length);
-
-    for (let i = 0; i < binary.length; i += 1) {
-        buffer[i] = binary.charCodeAt(i);
-    }
-
-    return new File([buffer], fileName, { type: mimeType });
-}
-
-function renderCurrentImage() {
-    const current = state.results[state.currentIndex];
-    if (!current) {
-        return;
-    }
-
-    const preview = state.previews[current.imageIndex];
-    imageMeta.textContent = `${preview?.name || current.filename} · ${state.currentIndex + 1} / ${state.results.length}`;
-
-    renderDetections(current.predictions);
-    resultImage.onload = () => {
-        drawOverlay(current.predictions);
-    };
-    resultImage.src = preview?.dataURL || '';
-    if (resultImage.complete && resultImage.naturalWidth) {
-        drawOverlay(current.predictions);
-    }
-
-    prevBtn.disabled = state.currentIndex === 0;
-    nextBtn.disabled = state.currentIndex >= state.results.length - 1;
-}
-
-function drawOverlay(predictions) {
+function drawOverlay(photo, detections) {
     overlayLayer.innerHTML = '';
-    const threshold = state.threshold;
-    const filtered = predictions.filter((prediction) => typeof prediction.confidence !== 'number' || prediction.confidence >= threshold);
-
-    if (!filtered.length) {
-        return;
-    }
-
-    const rect = resultImage.getBoundingClientRect();
-    const naturalWidth = resultImage.naturalWidth || rect.width;
-    const naturalHeight = resultImage.naturalHeight || rect.height;
-    const scaleX = rect.width / naturalWidth;
-    const scaleY = rect.height / naturalHeight;
-
-    filtered.forEach((prediction) => {
-        if (
-            typeof prediction.x !== 'number' ||
-            typeof prediction.y !== 'number' ||
-            typeof prediction.width !== 'number' ||
-            typeof prediction.height !== 'number'
-        ) {
-            return;
-        }
-
-        const left = (prediction.x - prediction.width / 2) * scaleX;
-        const top = (prediction.y - prediction.height / 2) * scaleY;
-        const width = prediction.width * scaleX;
-        const height = prediction.height * scaleY;
-
+    if (!detections.length) return;
+    detections.forEach((det, index) => {
+        const [top, left, width, height] = seededBox(det.id, index);
         const box = document.createElement('div');
         box.className = 'box';
-        box.style.left = `${left}px`;
-        box.style.top = `${top}px`;
-        box.style.width = `${width}px`;
-        box.style.height = `${height}px`;
-        box.dataset.predictionId = prediction.id;
-
+        box.style.top = `${top}%`;
+        box.style.left = `${left}%`;
+        box.style.width = `${width}%`;
+        box.style.height = `${height}%`;
         const label = document.createElement('div');
         label.className = 'label';
-        const confidence = typeof prediction.confidence === 'number' ? `${Math.round(prediction.confidence * 100)}%` : '';
-        label.textContent = confidence ? `${prediction.class || 'Defect'} · ${confidence}` : prediction.class || 'Defect';
-
+        label.textContent = `${det.type} · ${Math.round(det.confidence * 100)}%`;
         box.appendChild(label);
         overlayLayer.appendChild(box);
     });
 }
 
-function renderDetections(predictions) {
-    detectionList.innerHTML = '';
-    const filtered = predictions.filter((prediction) => typeof prediction.confidence !== 'number' || prediction.confidence >= state.threshold);
-
-    if (!filtered.length) {
-        emptyState?.classList.remove('hidden');
-        return;
+function seededBox(id, offset) {
+    let hash = 0;
+    for (let i = 0; i < id.length; i += 1) {
+        hash = (hash << 5) - hash + id.charCodeAt(i);
+        hash |= 0;
     }
-
-    emptyState?.classList.add('hidden');
-
-    filtered.forEach((prediction) => {
-        const item = document.createElement('div');
-        item.className = 'list-item';
-        item.dataset.predictionId = prediction.id;
-
-        const title = document.createElement('span');
-        title.className = 'title';
-        title.textContent = prediction.class || 'Defect';
-
-        const meta = document.createElement('span');
-        meta.className = 'meta';
-        const confidence = typeof prediction.confidence === 'number' ? `${Math.round(prediction.confidence * 100)}% confidence` : 'Confidence unavailable';
-        meta.textContent = confidence;
-
-        item.appendChild(title);
-        item.appendChild(meta);
-        item.addEventListener('click', () => highlightPrediction(prediction.id));
-        detectionList.appendChild(item);
-    });
+    const base = Math.abs(hash + offset * 997);
+    const top = 10 + (base % 60);
+    const left = 10 + ((base >> 3) % 50);
+    const width = 20 + ((base >> 5) % 30);
+    const height = 20 + ((base >> 7) % 35);
+    return [Math.min(top, 70), Math.min(left, 60), width, height];
 }
 
-function highlightPrediction(predictionId) {
-    overlayLayer.querySelectorAll('.box').forEach((box) => {
-        box.classList.toggle('highlight', box.dataset.predictionId === predictionId);
-    });
-
-    detectionList.querySelectorAll('.list-item').forEach((item) => {
-        item.classList.toggle('active', item.dataset.predictionId === predictionId);
-    });
-}
-
-prevBtn?.addEventListener('click', () => {
-    if (state.currentIndex > 0) {
-        state.currentIndex -= 1;
-        renderCurrentImage();
-        persistSession();
-    }
-});
-
-nextBtn?.addEventListener('click', () => {
-    if (state.currentIndex < state.results.length - 1) {
-        state.currentIndex += 1;
-        renderCurrentImage();
-        persistSession();
-    }
-});
-
-thresholdSlider?.addEventListener('input', (event) => {
-    const value = Number(event.target.value) / 100;
-    state.threshold = value;
-    thresholdValue.textContent = `${event.target.value}%`;
-    renderCurrentImage();
-    persistSession();
-});
-
-newSessionBtn?.addEventListener('click', () => {
-    sessionStorage.removeItem(STORAGE_KEY);
-    window.location.href = 'wizard.html';
-});
-
-window.addEventListener('resize', () => {
-    if (state.results.length) {
-        renderCurrentImage();
-    }
-});
-
-function toggleLoading(visible) {
-    loadingState?.classList.toggle('active', visible);
-}
-
-function persistSession() {
-    const payload = {
-        area: state.area,
-        files: state.previews,
-        results: state.results,
-        threshold: state.threshold,
-        currentIndex: state.currentIndex,
-        timestamp: Date.now()
+function debounce(fn, wait) {
+    let timer = null;
+    return (...args) => {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(() => fn.apply(null, args), wait);
     };
-
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
-
-function redirectToWizard() {
-    window.location.href = 'wizard.html';
-}
-
-function clamp(value, min, max) {
-    if (value < min) return min;
-    if (value > max) return max;
-    return value;
-}
-

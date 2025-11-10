@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airplane Inspection · Capture</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <small>SpecScan</small>
+        <h1>Airplane Inspection Console</h1>
+        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+    </header>
+
+    <main>
+        <div class="page-shell">
+            <section class="panel">
+                <div class="step-header">
+                    <span class="step-indicator">Step 2 of 5</span>
+                    <h2>Continuous Photo Capture</h2>
+                    <p class="muted">Gather aircraft imagery in sequence. Photos captured here drive downstream tagging, analysis, and reporting.</p>
+                </div>
+
+                <div class="banner progress-banner" id="progressBanner" aria-live="polite"></div>
+
+                <div class="capture-stage" id="captureStage">
+                    <div>
+                        <strong>No photos captured yet</strong>
+                        <p class="muted">Use the buttons below to capture live imagery or upload existing shots from the hangar floor.</p>
+                    </div>
+                </div>
+
+                <div class="capture-actions">
+                    <button class="btn primary" id="takePhotoBtn" type="button">Take Photo</button>
+                    <button class="btn" id="uploadPhotosBtn" type="button">Upload Photos</button>
+                    <input id="fileInput" type="file" accept="image/*" multiple hidden>
+                </div>
+
+                <div class="photo-grid" id="photoGrid" aria-live="polite"></div>
+
+                <div class="page-actions">
+                    <button class="btn ghost" id="cancelCaptureBtn" type="button">Cancel</button>
+                    <div class="page-actions-right">
+                        <button class="btn primary" id="continueToTagBtn" type="button" disabled>Continue to Organize</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="capture.js" type="module"></script>
+</body>
+</html>
+

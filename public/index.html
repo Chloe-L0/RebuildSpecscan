@@ -3,36 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airplane Inspection</title>
+    <title>Airplane Inspection · Start</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <header>
-        <span class="badge">SpecScan</span>
+        <small>SpecScan</small>
         <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician through area selection, capture or upload images, and visualize AI detected defects directly in the browser.</p>
+        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
     </header>
 
     <main>
-        <section>
-            <div class="home-panel">
-                <aside>
-                    <h2>Workflow</h2>
-                    <ul>
-                        <li>1. Select inspection area</li>
-                        <li>2. Capture or upload imagery</li>
-                        <li>3. Run AI analysis</li>
-                        <li>4. Review detections</li>
-                    </ul>
-                </aside>
-                <article>
-                    <h2>Predictive maintenance, simplified.</h2>
-                    <p>Launch a new inspection session to evaluate one or more airframe images. Results are normalized through the secure SpecScan API proxy before rendering overlays on this device.</p>
-                    <button class="cta" id="startBtn">Start New Inspection</button>
-                </article>
-            </div>
-        </section>
+        <div class="page-shell">
+            <section class="panel">
+                <div class="step-header">
+                    <span class="step-indicator">Step 1 of 5</span>
+                    <h2>Start Inspection</h2>
+                    <p class="muted">Record inspection details before capturing aircraft imagery. Information populates future reporting artifacts.</p>
+                </div>
+
+                <form id="startForm" class="form-grid">
+                    <div class="grid-three">
+                        <div class="input-field">
+                            <label for="tailNumber">Tail Number</label>
+                            <input id="tailNumber" name="tailNumber" placeholder="e.g. N123AB" autocomplete="off" required>
+                        </div>
+
+                        <div class="input-field">
+                            <label for="inspectionType">Inspection Type</label>
+                            <select id="inspectionType" name="inspectionType" required>
+                                <option value="" disabled selected>Select type</option>
+                                <option value="Inbound">Inbound</option>
+                                <option value="Outbound">Outbound</option>
+                            </select>
+                        </div>
+
+                        <div class="input-field">
+                            <label for="inspectorName">Inspector Name</label>
+                            <input id="inspectorName" name="inspectorName" placeholder="Full name" autocomplete="name" required>
+                        </div>
+                    </div>
+
+                    <div class="grid-two">
+                        <div class="input-field">
+                            <label for="timestamp">Date &amp; Time</label>
+                            <input id="timestamp" name="timestamp" readonly aria-readonly="true">
+                            <span class="helper">Automatically captured when inspection begins.</span>
+                        </div>
+
+                        <div class="input-field">
+                            <label for="notes">Internal Notes</label>
+                            <textarea id="notes" name="notes" rows="3" placeholder="Inspection preparation notes (optional)"></textarea>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="page-actions">
+                    <div></div>
+                    <div class="page-actions-right">
+                        <button type="submit" form="startForm" class="btn primary" id="startCaptureBtn">Start Photo Capture</button>
+                    </div>
+                </div>
+            </section>
+        </div>
     </main>
-    <script src="home.js" type="module"></script>
+    <script src="start.js" type="module"></script>
 </body>
 </html>

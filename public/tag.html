@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airplane Inspection · Tag</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <small>SpecScan</small>
+        <h1>Airplane Inspection Console</h1>
+        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+    </header>
+
+    <main>
+        <div class="page-shell">
+            <section class="panel tag-layout">
+                <div class="step-header">
+                    <span class="step-indicator">Step 3 of 5</span>
+                    <h2>Tag Photos</h2>
+                    <p class="muted">Assign every photo to a structural area so downstream analysis can group detections by aircraft section.</p>
+                </div>
+
+                <div class="banner progress-banner" id="tagProgress"></div>
+
+                <div class="info-banner">
+                    Select one or many photos, then choose an area on the right. “Select All” affects only untagged photos. You can reassign areas at any time before analysis.
+                </div>
+
+                <div class="tag-grid">
+                    <div class="tag-body" id="tagBody"></div>
+                    <aside class="area-selector" aria-label="Area selector">
+                        <strong>Assign to area</strong>
+                        <div class="area-chips" id="areaChips"></div>
+                    </aside>
+                </div>
+
+                <div class="page-actions">
+                    <button class="btn ghost" id="backToCaptureBtn" type="button">Back to Capture</button>
+                    <div class="page-actions-right">
+                        <button class="btn" id="selectAllBtn" type="button">Select All Untagged</button>
+                        <button class="btn primary" id="analyzeBtn" type="button" disabled>Analyze All Photos</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="tag.js" type="module"></script>
+</body>
+</html>
+

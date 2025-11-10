@@ -8,56 +8,62 @@
 </head>
 <body>
     <header>
-        <span class="badge">SpecScan</span>
+        <small>SpecScan</small>
         <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician through area selection, capture or upload images, and visualize AI detected defects directly in the browser.</p>
+        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
     </header>
 
     <main>
-        <section>
-            <div class="results-shell">
-                <div class="status-banner" id="statusBanner">Awaiting analysis…</div>
-
-                <div class="loading" id="loadingState">
-                    <div class="spinner"></div>
-                    <p>Running inference with Roboflow…</p>
+        <div class="page-shell">
+            <section class="panel results-layout">
+                <div class="step-header">
+                    <span class="step-indicator">Step 4 of 5</span>
+                    <h2>Analysis Results</h2>
+                    <p class="muted">Review detections grouped by area. Adjust the confidence filter and flag false positives before continuing to the final report.</p>
                 </div>
 
-                <div id="resultsContent" class="hidden">
-                    <div class="results-body">
-                        <div class="canvas-card">
-                            <div class="nav-bar">
-                                <div class="nav-group">
-                                    <button class="nav-btn" id="prevBtn">Previous</button>
-                                    <button class="nav-btn" id="nextBtn">Next</button>
-                                </div>
-                                <div class="meta" id="imageMeta"></div>
-                            </div>
-                            <div class="image-stage">
-                                <img id="resultImage" alt="Inspection result">
-                                <div id="overlayLayer"></div>
-                            </div>
-                            <div class="tools">
-                                <label for="thresholdSlider">Confidence filter</label>
-                                <div>
-                                    <input type="range" id="thresholdSlider" min="0" max="100" value="50">
-                                    <span id="thresholdValue">50%</span>
-                                </div>
+                <div class="tabs" id="areaTabs" role="tablist" aria-label="Area detections"></div>
+
+                <div class="results-body">
+                    <section class="viewer" aria-label="Detection viewer">
+                        <div class="viewer-controls">
+                            <div class="helper" id="imageMeta">Photo -</div>
+                            <div>
+                                <button class="btn" id="prevBtn" type="button">Previous</button>
+                                <button class="btn" id="nextBtn" type="button">Next</button>
                             </div>
                         </div>
 
-                        <div class="list-card">
-                            <h3>Detections</h3>
-                            <div class="list" id="detectionList"></div>
-                            <div class="empty-state hidden" id="emptyState">No detections above the current confidence threshold.</div>
-                            <div class="actions">
-                                <button id="newSessionBtn">Inspect Another Area</button>
+                        <div class="viewer-stage" id="viewerStage">
+                            <img id="resultImage" alt="Inspection photo preview">
+                            <div class="overlay-layer" id="overlayLayer"></div>
+                        </div>
+
+                        <div class="viewer-controls">
+                            <div class="slider-group">
+                                <label for="confidenceSlider">Confidence</label>
+                                <input type="range" id="confidenceSlider" min="0" max="100" value="50">
+                                <span id="confidenceValue">50%</span>
+                            </div>
+                            <div class="helper" id="detectionSummary">0 detections visible</div>
+                        </div>
+                    </section>
+
+                    <aside class="detections-panel">
+                        <h3>Detections</h3>
+                        <div class="detections-list" id="detectionsList"></div>
+                        <div class="empty-state hidden" id="emptyState">No detections above the current confidence threshold.</div>
+                        <div class="page-actions">
+                            <button class="btn" id="saveDraftBtn" type="button">Save Draft</button>
+                            <div class="page-actions-right">
+                                <button class="btn ghost" id="reorganizeBtn" type="button">Re-organize Photos</button>
+                                <button class="btn primary" id="continueReportBtn" type="button">Continue to Report</button>
                             </div>
                         </div>
-                    </div>
+                    </aside>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
     </main>
 
     <script src="results.js" type="module"></script>
