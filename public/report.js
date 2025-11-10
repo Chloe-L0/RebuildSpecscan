@@ -1,137 +1,109 @@
 import {
-    loadState,
+    AREAS,
+    readState,
+    summarizeDetectionsByArea,
     updateReportOptions
 } from './state.js';
 
-const REPORT_RECEIPT_KEY = 'specscan_report_receipt';
+const reportSummaryMeta = document.getElementById('reportSummaryMeta');
+const totalPhotosEl = document.getElementById('totalPhotos');
+const totalDetectionsEl = document.getElementById('totalDetections');
+const areasInspectedEl = document.getElementById('areasInspected');
+const thumbnailToggle = document.getElementById('thumbnailToggle');
+const falsePositiveToggle = document.getElementById('falsePositiveToggle');
+const allPhotosToggle = document.getElementById('allPhotosToggle');
+const backToResultsBtn = document.getElementById('backToResultsBtn');
+const downloadReportBtn = document.getElementById('downloadReportBtn');
+const submitInspectionBtn = document.getElementById('submitInspectionBtn');
+const reportPreviewDetail = document.getElementById('reportPreviewDetail');
 
-const summaryGrid = document.getElementById('summaryGrid');
-const reportPreview = document.getElementById('reportPreview');
-const exportRadios = document.querySelectorAll('input[name="exportFormat"]');
-const includeFalsePositives = document.getElementById('includeFalsePositives');
-const includeAllPhotos = document.getElementById('includeAllPhotos');
-const backBtn = document.getElementById('backToResultsBtn');
-const downloadBtn = document.getElementById('downloadBtn');
-const submitBtn = document.getElementById('submitBtn');
+const ensureAnalysisComplete = () => {
+    const state = readState();
+    if (!state.inspection.tailNumber || !state.inspection.startedAt) {
+        window.location.replace('index.html');
+        return null;
+    }
+    const taggedPhotos = state.photos.filter((photo) => photo.area);
+    if (!taggedPhotos.length) {
+        window.location.replace('tag.html');
+        return null;
+    }
+    if (!state.analysis.completed) {
+        window.location.replace('results.html');
+        return null;
+    }
+    return state;
+};
 
-let state = loadState();
+const formatMeta = (state) => {
+    const inspector = state.inspection.inspectorName || 'Unassigned inspector';
+    const started = state.inspection.startedAt
+        ? new Date(state.inspection.startedAt).toLocaleString()
+        : 'Unknown start';
+    return `Tail ${state.inspection.tailNumber} · ${state.inspection.inspectionType} · ${inspector} · ${started}`;
+};
 
-if (!state.start) {
-    window.location.href = 'index.html';
-}
+const computeDetectionTotals = (state, includeFalsePositives) =>
+    state.detections.filter((detection) => {
+        if (!includeFalsePositives && detection.falsePositive) return false;
+        if (typeof detection.confidence === 'number' && detection.confidence < state.analysis.threshold) {
+            return false;
+        }
+        return true;
+    }).length;
 
-if (!state.detections.length) {
-    window.location.href = 'results.html';
-}
+const renderSummary = () => {
+    const state = readState();
+    const tagged = state.photos.filter((photo) => Boolean(photo.area));
+    const inspectedAreas = new Set(tagged.map((photo) => photo.area));
+    const detectionCount = computeDetectionTotals(state, state.report.includeFalsePositives);
 
-renderSummary();
-renderPreview();
-initialiseControls();
+    reportSummaryMeta.textContent = formatMeta(state);
+    totalPhotosEl.textContent = tagged.length.toString();
+    totalDetectionsEl.textContent = detectionCount.toString();
+    areasInspectedEl.textContent = inspectedAreas.size.toString();
 
-backBtn?.addEventListener('click', () => {
+    const counts = summarizeDetectionsByArea(state);
+    const areaDetails = AREAS.filter((area) => inspectedAreas.has(area))
+        .map((area) => `${area} (${counts[area] || 0})`)
+        .join(', ');
+
+    reportPreviewDetail.textContent = `Export will include ${detectionCount} detection${detectionCount === 1 ? '' : 's'} across ${inspectedAreas.size} area${inspectedAreas.size === 1 ? '' : 's'}: ${areaDetails || 'None'}. Options – Thumbnails: ${state.report.includeThumbnails ? 'ON' : 'OFF'}, False positives: ${state.report.includeFalsePositives ? 'ON' : 'OFF'}, All photos: ${state.report.includeAllPhotos ? 'ON' : 'OFF'}.`;
+
+    thumbnailToggle.checked = state.report.includeThumbnails;
+    falsePositiveToggle.checked = state.report.includeFalsePositives;
+    allPhotosToggle.checked = state.report.includeAllPhotos;
+};
+
+thumbnailToggle?.addEventListener('change', (event) => {
+    updateReportOptions({ includeThumbnails: event.target.checked });
+    renderSummary();
+});
+
+falsePositiveToggle?.addEventListener('change', (event) => {
+    updateReportOptions({ includeFalsePositives: event.target.checked });
+    renderSummary();
+});
+
+allPhotosToggle?.addEventListener('change', (event) => {
+    updateReportOptions({ includeAllPhotos: event.target.checked });
+    renderSummary();
+});
+
+backToResultsBtn?.addEventListener('click', () => {
     window.location.href = 'results.html';
 });
 
-downloadBtn?.addEventListener('click', () => {
-    downloadBtn.textContent = 'Generating...';
-    downloadBtn.disabled = true;
-    setTimeout(() => {
-        downloadBtn.textContent = 'Download Report';
-        downloadBtn.disabled = false;
-    }, 1200);
+downloadReportBtn?.addEventListener('click', () => {
+    alert('PDF export is coming soon. Configure your options and submit to finalize the inspection.');
 });
 
-submitBtn?.addEventListener('click', () => {
-    const receipt = {
-        reportId: generateReportId(),
-        submittedAt: new Date().toISOString(),
-        tailNumber: state.start.tailNumber
-    };
-    sessionStorage.setItem(REPORT_RECEIPT_KEY, JSON.stringify(receipt));
+submitInspectionBtn?.addEventListener('click', () => {
     window.location.href = 'success.html';
 });
 
-exportRadios.forEach((radio) => {
-    radio.addEventListener('change', () => {
-        state = updateReportOptions({ exportFormat: radio.value });
-    });
-});
-
-includeFalsePositives?.addEventListener('change', (event) => {
-    state = updateReportOptions({ includeFalsePositives: event.target.checked });
-});
-
-includeAllPhotos?.addEventListener('change', (event) => {
-    state = updateReportOptions({ includeAllPhotos: event.target.checked });
-});
-
-function renderSummary() {
-    const totalPhotos = state.photos.length;
-    const totalDetections = state.detections.length;
-    const inspectedAreas = new Set(state.photos.filter(photo => photo.area).map(photo => photo.area));
-
-    summaryGrid.innerHTML = `
-        <div class="summary-card">
-            <strong>Total Photos</strong>
-            <span>${totalPhotos}</span>
-        </div>
-        <div class="summary-card">
-            <strong>Total Defects</strong>
-            <span>${totalDetections}</span>
-        </div>
-        <div class="summary-card">
-            <strong>Areas Inspected</strong>
-            <span>${Array.from(inspectedAreas).join(', ') || 'Pending'}</span>
-        </div>
-    `;
-}
-
-function renderPreview() {
-    const { start, detections } = state;
-    const grouped = groupByArea(detections);
-
-    const sections = Array.from(grouped.entries()).map(([area, items]) => {
-        const list = items.map((item) => `<li>${item.type} — ${Math.round(item.confidence * 100)}% confidence (Photo ${item.photoNumber})</li>`).join('');
-        return `
-            <section>
-                <strong>${area}</strong>
-                <ul>${list}</ul>
-            </section>
-        `;
-    }).join('');
-
-    reportPreview.innerHTML = `
-        <h3>Inspection Overview</h3>
-        <p class="supporting">
-            Tail ${start.tailNumber} · ${start.inspectionType} · Inspector ${start.inspectorName} · ${new Date(start.timestamp).toLocaleString()}
-        </p>
-        <h4>Findings by Area</h4>
-        ${sections || '<p class="muted">No detections recorded.</p>'}
-    `;
-}
-
-function initialiseControls() {
-    const { reportOptions } = state;
-    exportRadios.forEach((radio) => {
-        radio.checked = radio.value === reportOptions.exportFormat;
-    });
-    includeFalsePositives.checked = Boolean(reportOptions.includeFalsePositives);
-    includeAllPhotos.checked = Boolean(reportOptions.includeAllPhotos);
-}
-
-function groupByArea(items) {
-    return items.reduce((map, item) => {
-        const area = item.area || 'Unassigned';
-        if (!map.has(area)) {
-            map.set(area, []);
-        }
-        map.get(area).push(item);
-        return map;
-    }, new Map());
-}
-
-function generateReportId() {
-    const base = Math.floor(Math.random() * 900000 + 100000);
-    return `RPT-${base}`;
+const initialState = ensureAnalysisComplete();
+if (initialState) {
+    renderSummary();
 }
 

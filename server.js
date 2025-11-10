@@ -42,6 +42,16 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Serve uiImage directory for plane illustration
 app.use('/uiImage', express.static(path.join(__dirname, '../uiImage')));
 
+const sendPublicFile = (res, fileName) =>
+    res.sendFile(path.join(__dirname, 'public', fileName));
+
+app.get(['/', '/start'], (req, res) => sendPublicFile(res, 'index.html'));
+app.get('/capture', (req, res) => sendPublicFile(res, 'capture.html'));
+app.get('/tag', (req, res) => sendPublicFile(res, 'tag.html'));
+app.get('/results', (req, res) => sendPublicFile(res, 'results.html'));
+app.get('/report', (req, res) => sendPublicFile(res, 'report.html'));
+app.get('/success', (req, res) => sendPublicFile(res, 'success.html'));
+
 // Configure multer for file uploads (in memory)
 const upload = multer({
     storage: multer.memoryStorage(),

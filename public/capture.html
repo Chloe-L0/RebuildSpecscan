@@ -3,53 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airplane Inspection · Capture</title>
+    <title>SpecScan · Capture Photos</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <header>
-        <small>SpecScan</small>
-        <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+<body data-step="2">
+    <header class="app-header">
+        <div class="brand">
+            <span class="badge">SpecScan</span>
+            <h1>Airplane Inspection Console</h1>
+        </div>
+        <div class="step-indicator">
+            <span class="step-label">Step 2 of 6</span>
+            <span class="step-name">Continuous Photo Capture</span>
+        </div>
     </header>
 
-    <main>
-        <div class="page-shell">
-            <section class="panel">
-                <div class="step-header">
-                    <span class="step-indicator">Step 2 of 5</span>
-                    <h2>Continuous Photo Capture</h2>
-                    <p class="muted">Gather aircraft imagery in sequence. Photos captured here drive downstream tagging, analysis, and reporting.</p>
+    <main class="shell">
+        <section class="card">
+            <div class="progress-banner" id="progressBanner">
+                <div>
+                    <strong id="aircraftLabel">Tail —</strong>
+                    <div class="muted" id="inspectionMeta"></div>
                 </div>
+                <div class="pill" id="photoCount">0 Photos</div>
+            </div>
 
-                <div class="banner progress-banner" id="progressBanner" aria-live="polite"></div>
-
-                <div class="capture-stage" id="captureStage">
-                    <div>
-                        <strong>No photos captured yet</strong>
-                        <p class="muted">Use the buttons below to capture live imagery or upload existing shots from the hangar floor.</p>
-                    </div>
+            <div class="toolbar">
+                <div>
+                    <h2>Capture or upload imagery</h2>
+                    <p class="muted">Collect a complete view of the airframe. You can mix live captures and library uploads.</p>
                 </div>
-
-                <div class="capture-actions">
-                    <button class="btn primary" id="takePhotoBtn" type="button">Take Photo</button>
-                    <button class="btn" id="uploadPhotosBtn" type="button">Upload Photos</button>
-                    <input id="fileInput" type="file" accept="image/*" multiple hidden>
+                <div class="media-actions">
+                    <button class="secondary" id="takePhotoBtn">Take Photo</button>
+                    <button class="primary" id="uploadPhotosBtn">Upload Photos</button>
+                    <input type="file" id="fileInput" accept="image/*" hidden multiple>
                 </div>
+            </div>
 
-                <div class="photo-grid" id="photoGrid" aria-live="polite"></div>
-
-                <div class="page-actions">
-                    <button class="btn ghost" id="cancelCaptureBtn" type="button">Cancel</button>
-                    <div class="page-actions-right">
-                        <button class="btn primary" id="continueToTagBtn" type="button" disabled>Continue to Organize</button>
-                    </div>
+            <div id="photoContainer">
+                <div class="empty-state" id="emptyState">
+                    <p>No photos captured yet.</p>
+                    <small>Use “Take Photo” for live capture or “Upload Photos” to select multiple images.</small>
                 </div>
-            </section>
-        </div>
+                <div class="media-grid hidden" id="mediaGrid"></div>
+            </div>
+
+            <footer class="card-footer">
+                <button class="ghost" id="cancelBtn">Cancel</button>
+                <button class="primary" id="continueBtn" disabled>Continue to Organize</button>
+            </footer>
+        </section>
     </main>
 
-    <script src="capture.js" type="module"></script>
+    <script type="module" src="state.js"></script>
+    <script type="module" src="capture.js"></script>
 </body>
 </html>
 

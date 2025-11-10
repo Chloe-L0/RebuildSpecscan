@@ -3,70 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airplane Inspection · Start</title>
+    <title>SpecScan · Start Inspection</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <header>
-        <small>SpecScan</small>
-        <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+<body data-step="1">
+    <header class="app-header">
+        <div class="brand">
+            <span class="badge">SpecScan</span>
+            <h1>Airplane Inspection Console</h1>
+        </div>
+        <div class="step-indicator">
+            <span class="step-label">Step 1 of 6</span>
+            <span class="step-name">Start Inspection</span>
+        </div>
     </header>
 
-    <main>
-        <div class="page-shell">
-            <section class="panel">
-                <div class="step-header">
-                    <span class="step-indicator">Step 1 of 5</span>
-                    <h2>Start Inspection</h2>
-                    <p class="muted">Record inspection details before capturing aircraft imagery. Information populates future reporting artifacts.</p>
-                </div>
+    <main class="shell">
+        <section class="card start-card">
+            <header class="card-header">
+                <h2>Inspection Details</h2>
+                <p>Provide the basics so we can stamp the report and segment analysis by airframe.</p>
+            </header>
+            <form class="form-grid" id="startForm">
+                <label class="form-field">
+                    <span class="form-label">Tail Number</span>
+                    <input type="text" id="tailNumber" name="tailNumber" maxlength="10" required placeholder="e.g. N12345">
+                </label>
 
-                <form id="startForm" class="form-grid">
-                    <div class="grid-three">
-                        <div class="input-field">
-                            <label for="tailNumber">Tail Number</label>
-                            <input id="tailNumber" name="tailNumber" placeholder="e.g. N123AB" autocomplete="off" required>
-                        </div>
-
-                        <div class="input-field">
-                            <label for="inspectionType">Inspection Type</label>
-                            <select id="inspectionType" name="inspectionType" required>
-                                <option value="" disabled selected>Select type</option>
-                                <option value="Inbound">Inbound</option>
-                                <option value="Outbound">Outbound</option>
-                            </select>
-                        </div>
-
-                        <div class="input-field">
-                            <label for="inspectorName">Inspector Name</label>
-                            <input id="inspectorName" name="inspectorName" placeholder="Full name" autocomplete="name" required>
-                        </div>
+                <fieldset class="form-field">
+                    <legend class="form-label">Inspection Type</legend>
+                    <div class="radio-group">
+                        <label class="radio">
+                            <input type="radio" name="inspectionType" value="Inbound" checked>
+                            <span>Inbound</span>
+                        </label>
+                        <label class="radio">
+                            <input type="radio" name="inspectionType" value="Outbound">
+                            <span>Outbound</span>
+                        </label>
                     </div>
+                </fieldset>
 
-                    <div class="grid-two">
-                        <div class="input-field">
-                            <label for="timestamp">Date &amp; Time</label>
-                            <input id="timestamp" name="timestamp" readonly aria-readonly="true">
-                            <span class="helper">Automatically captured when inspection begins.</span>
-                        </div>
+                <label class="form-field">
+                    <span class="form-label">Inspector Name</span>
+                    <input type="text" id="inspectorName" name="inspectorName" required placeholder="Your name">
+                </label>
 
-                        <div class="input-field">
-                            <label for="notes">Internal Notes</label>
-                            <textarea id="notes" name="notes" rows="3" placeholder="Inspection preparation notes (optional)"></textarea>
-                        </div>
-                    </div>
-                </form>
+                <label class="form-field">
+                    <span class="form-label">Started At</span>
+                    <input type="text" id="startedAt" name="startedAt" readonly>
+                </label>
+            </form>
 
-                <div class="page-actions">
-                    <div></div>
-                    <div class="page-actions-right">
-                        <button type="submit" form="startForm" class="btn primary" id="startCaptureBtn">Start Photo Capture</button>
-                    </div>
-                </div>
-            </section>
-        </div>
+            <footer class="card-footer">
+                <button type="button" class="primary" id="startCaptureBtn">Start Photo Capture</button>
+            </footer>
+        </section>
     </main>
-    <script src="start.js" type="module"></script>
+
+    <script type="module" src="state.js"></script>
+    <script type="module" src="start.js"></script>
 </body>
 </html>

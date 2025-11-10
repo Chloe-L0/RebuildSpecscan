@@ -3,73 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airplane Inspection · Report</title>
+    <title>SpecScan · Final Report</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <header>
-        <small>SpecScan</small>
-        <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+<body data-step="5">
+    <header class="app-header">
+        <div class="brand">
+            <span class="badge">SpecScan</span>
+            <h1>Airplane Inspection Console</h1>
+        </div>
+        <div class="step-indicator">
+            <span class="step-label">Step 5 of 6</span>
+            <span class="step-name">Final Report</span>
+        </div>
     </header>
 
-    <main>
-        <div class="page-shell">
-            <section class="panel">
-                <div class="step-header">
-                    <span class="step-indicator">Step 5 of 5</span>
-                    <h2>Final Report</h2>
-                    <p class="muted">Review inspection highlights, choose export options, and submit the inspection for archival.</p>
+    <main class="shell">
+        <section class="card">
+            <div class="progress-banner">
+                <div>
+                    <strong>Review findings before export</strong>
+                    <div class="muted" id="reportSummaryMeta"></div>
+                </div>
+                <div class="pill">Report Assembly</div>
+            </div>
+
+            <div class="report-grid">
+                <article class="summary-card">
+                    <h3>Total Photos</h3>
+                    <div class="summary-stat" id="totalPhotos">--</div>
+                    <p class="muted">Captured and tagged across all areas.</p>
+                </article>
+                <article class="summary-card">
+                    <h3>Detections</h3>
+                    <div class="summary-stat" id="totalDetections">--</div>
+                    <p class="muted">Filtered by confidence and false-positive status.</p>
+                </article>
+                <article class="summary-card">
+                    <h3>Areas Inspected</h3>
+                    <div class="summary-stat" id="areasInspected">--</div>
+                    <p class="muted">Distinct airframe zones covered in this session.</p>
+                </article>
+            </div>
+
+            <div class="report-preview">
+                <h3>Export Preferences</h3>
+                <label class="toggle">
+                    <input type="checkbox" id="thumbnailToggle" checked>
+                    <span>Include defect thumbnails in PDF export</span>
+                </label>
+                <label class="toggle">
+                    <input type="checkbox" id="falsePositiveToggle">
+                    <span>Include detections flagged as false positives</span>
+                </label>
+                <label class="toggle">
+                    <input type="checkbox" id="allPhotosToggle" checked>
+                    <span>Include all captured photos in appendix</span>
+                </label>
+
+                <div class="info-banner">
+                    <strong>Preview</strong>
+                    <span>This step configures the report. Export and submission are triggered from the actions below.</span>
                 </div>
 
-                <div class="summary-grid" id="summaryGrid"></div>
+                <div class="muted" id="reportPreviewDetail"></div>
+            </div>
 
-                <div class="report-preview" id="reportPreview"></div>
-
-                <div class="panel">
-                    <h3>Export Options</h3>
-                    <div class="option-group">
-                        <div class="helper">Choose export format</div>
-                        <div class="option-row">
-                            <input type="radio" name="exportFormat" id="exportPdf" value="PDF" checked>
-                            <label for="exportPdf">PDF</label>
-                        </div>
-                        <div class="option-row">
-                            <input type="radio" name="exportFormat" id="exportJson" value="JSON">
-                            <label for="exportJson">JSON</label>
-                        </div>
-                        <div class="option-row">
-                            <input type="radio" name="exportFormat" id="exportBoth" value="Both">
-                            <label for="exportBoth">Both</label>
-                        </div>
-                    </div>
-
-                    <hr>
-
-                    <div class="option-group">
-                        <div class="option-row">
-                            <input type="checkbox" id="includeFalsePositives" checked>
-                            <label for="includeFalsePositives">Include false-positive detections</label>
-                        </div>
-                        <div class="option-row">
-                            <input type="checkbox" id="includeAllPhotos" checked>
-                            <label for="includeAllPhotos">Include all photos in appendix</label>
-                        </div>
-                    </div>
+            <footer class="card-footer">
+                <div class="button-row">
+                    <button class="secondary" id="backToResultsBtn">Back to Results</button>
+                    <button class="ghost" id="downloadReportBtn">Download Report (PDF)</button>
                 </div>
-
-                <div class="page-actions">
-                    <button class="btn ghost" id="backToResultsBtn" type="button">Back to Results</button>
-                    <div class="page-actions-right">
-                        <button class="btn" id="downloadBtn" type="button">Download Report</button>
-                        <button class="btn primary" id="submitBtn" type="button">Submit Inspection</button>
-                    </div>
-                </div>
-            </section>
-        </div>
+                <button class="primary" id="submitInspectionBtn">Submit Inspection</button>
+            </footer>
+        </section>
     </main>
 
-    <script src="report.js" type="module"></script>
+    <script type="module" src="state.js"></script>
+    <script type="module" src="report.js"></script>
 </body>
 </html>
 

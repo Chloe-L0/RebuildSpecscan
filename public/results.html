@@ -3,70 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airplane Inspection · Results</title>
+    <title>SpecScan · Analysis Results</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <header>
-        <small>SpecScan</small>
-        <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+<body data-step="4">
+    <header class="app-header">
+        <div class="brand">
+            <span class="badge">SpecScan</span>
+            <h1>Airplane Inspection Console</h1>
+        </div>
+        <div class="step-indicator">
+            <span class="step-label">Step 4 of 6</span>
+            <span class="step-name">Analysis Results</span>
+        </div>
     </header>
 
-    <main>
-        <div class="page-shell">
-            <section class="panel results-layout">
-                <div class="step-header">
-                    <span class="step-indicator">Step 4 of 5</span>
-                    <h2>Analysis Results</h2>
-                    <p class="muted">Review detections grouped by area. Adjust the confidence filter and flag false positives before continuing to the final report.</p>
+    <main class="shell">
+        <section class="card">
+            <div class="progress-banner" id="statusBanner">
+                <div>
+                    <strong id="statusTitle">Awaiting analysis…</strong>
+                    <div class="muted" id="statusSubtitle">Run analysis to populate detections.</div>
                 </div>
+                <div class="pill" id="resultMeta">--</div>
+            </div>
 
-                <div class="tabs" id="areaTabs" role="tablist" aria-label="Area detections"></div>
+            <div class="loading hidden" id="loadingState">
+                <div class="spinner"></div>
+                <p>Running inference with Roboflow…</p>
+            </div>
 
-                <div class="results-body">
-                    <section class="viewer" aria-label="Detection viewer">
-                        <div class="viewer-controls">
-                            <div class="helper" id="imageMeta">Photo -</div>
-                            <div>
-                                <button class="btn" id="prevBtn" type="button">Previous</button>
-                                <button class="btn" id="nextBtn" type="button">Next</button>
+            <div id="resultsContent" class="hidden">
+                <div class="tabs" id="areaTabs"></div>
+
+                <div class="grid-split">
+                    <div class="viewer">
+                        <div class="viewer-meta">
+                            <span id="viewerMeta">Photo --</span>
+                            <div class="button-row">
+                                <button class="secondary" id="prevBtn">Previous</button>
+                                <button class="secondary" id="nextBtn">Next</button>
                             </div>
                         </div>
-
-                        <div class="viewer-stage" id="viewerStage">
-                            <img id="resultImage" alt="Inspection photo preview">
+                        <div class="viewer-stage">
+                            <img id="resultImage" alt="Inspection result">
                             <div class="overlay-layer" id="overlayLayer"></div>
                         </div>
-
-                        <div class="viewer-controls">
+                        <div class="viewer-meta">
                             <div class="slider-group">
-                                <label for="confidenceSlider">Confidence</label>
-                                <input type="range" id="confidenceSlider" min="0" max="100" value="50">
-                                <span id="confidenceValue">50%</span>
+                                <label for="thresholdSlider">Confidence</label>
+                                <input type="range" id="thresholdSlider" min="0" max="100" value="50">
+                                <span id="thresholdValue">50%</span>
                             </div>
-                            <div class="helper" id="detectionSummary">0 detections visible</div>
+                            <div class="muted" id="viewerSummary"></div>
                         </div>
-                    </section>
+                    </div>
 
-                    <aside class="detections-panel">
+                    <div>
                         <h3>Detections</h3>
-                        <div class="detections-list" id="detectionsList"></div>
-                        <div class="empty-state hidden" id="emptyState">No detections above the current confidence threshold.</div>
-                        <div class="page-actions">
-                            <button class="btn" id="saveDraftBtn" type="button">Save Draft</button>
-                            <div class="page-actions-right">
-                                <button class="btn ghost" id="reorganizeBtn" type="button">Re-organize Photos</button>
-                                <button class="btn primary" id="continueReportBtn" type="button">Continue to Report</button>
-                            </div>
+                        <div class="detection-list" id="detectionList"></div>
+                        <div class="empty-state hidden" id="emptyDetectionState">
+                            <p>No detections for this area above the current threshold.</p>
+                            <small>Adjust the confidence slider or review a different area.</small>
                         </div>
-                    </aside>
+                    </div>
                 </div>
-            </section>
-        </div>
+            </div>
+
+            <footer class="card-footer">
+                <div class="button-row">
+                    <button class="secondary" id="reorganizeBtn">Re-organize Photos</button>
+                    <button class="ghost" id="saveDraftBtn">Save Draft</button>
+                </div>
+                <div class="button-row">
+                    <button class="secondary" id="startOverBtn">Start New Inspection</button>
+                    <button class="primary" id="reportBtn">Continue to Report</button>
+                </div>
+            </footer>
+        </section>
     </main>
 
-    <script src="results.js" type="module"></script>
+    <script type="module" src="state.js"></script>
+    <script type="module" src="results.js"></script>
 </body>
 </html>
 

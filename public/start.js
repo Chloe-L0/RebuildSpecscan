@@ -1,40 +1,57 @@
-import { setStartDetails, resetState } from './state.js';
+import { setInspectionDetails, readState } from './state.js';
 
 const form = document.getElementById('startForm');
-const timestampField = document.getElementById('timestamp');
+const tailNumberInput = document.getElementById('tailNumber');
+const inspectorNameInput = document.getElementById('inspectorName');
+const startedAtInput = document.getElementById('startedAt');
+const startButton = document.getElementById('startCaptureBtn');
 
-function formatDateTime(date) {
-    return date.toLocaleString(undefined, {
+const formatDateTime = (date) =>
+    date.toLocaleString(undefined, {
         year: 'numeric',
         month: 'short',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit'
     });
-}
 
-function initialiseTimestamp() {
+const hydrateForm = () => {
+    const state = readState();
     const now = new Date();
-    timestampField.value = formatDateTime(now);
-    timestampField.dataset.iso = now.toISOString();
-}
+    const startedAt = state.inspection.startedAt ? new Date(state.inspection.startedAt) : now;
+    startedAtInput.value = formatDateTime(startedAt);
 
-function handleSubmit(event) {
-    event.preventDefault();
+    if (state.inspection.tailNumber) {
+        tailNumberInput.value = state.inspection.tailNumber;
+    }
+    if (state.inspection.inspectorName) {
+        inspectorNameInput.value = state.inspection.inspectorName;
+    }
+    const radio = form.elements.namedItem('inspectionType');
+    if (radio) {
+        const inputs = Array.isArray(radio) ? radio : [radio];
+        inputs.forEach((input) => {
+            input.checked = input.value === state.inspection.inspectionType;
+        });
+    }
+};
+
+const handleStart = () => {
+    if (!form.reportValidity()) return;
+
     const formData = new FormData(form);
     const payload = {
-        tailNumber: String(formData.get('tailNumber') || '').toUpperCase(),
-        inspectionType: String(formData.get('inspectionType') || ''),
-        inspectorName: String(formData.get('inspectorName') || ''),
-        timestamp: timestampField.dataset.iso || new Date().toISOString(),
-        notes: String(formData.get('notes') || '')
+        tailNumber: formData.get('tailNumber')?.toString() || '',
+        inspectionType: formData.get('inspectionType')?.toString() || 'Inbound',
+        inspectorName: formData.get('inspectorName')?.toString() || '',
+        startedAt: new Date().toISOString()
     };
 
-    setStartDetails(payload);
+    setInspectionDetails(payload);
     window.location.href = 'capture.html';
-}
+};
 
-resetState();
-initialiseTimestamp();
-form?.addEventListener('submit', handleSubmit);
+startButton?.addEventListener('click', handleStart);
+
+hydrateForm();
 

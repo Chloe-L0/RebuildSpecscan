@@ -1,201 +1,185 @@
 import {
-    loadState,
-    updatePhotoArea,
-    setDetections
+    AREAS,
+    clearPhotoAreas,
+    readState,
+    setPhotoArea,
+    setAnalysisStatus
 } from './state.js';
 
-const AREAS = [
-    'Fuselage',
-    'Left Wing',
-    'Right Wing',
-    'Tail',
-    'Landing Gear',
-    'Engines'
-];
-
-const tagProgress = document.getElementById('tagProgress');
-const tagBody = document.getElementById('tagBody');
-const areaChips = document.getElementById('areaChips');
-const analyzeBtn = document.getElementById('analyzeBtn');
+const tagGrid = document.getElementById('tagGrid');
+const emptyState = document.getElementById('emptyTagState');
 const selectAllBtn = document.getElementById('selectAllBtn');
-const backBtn = document.getElementById('backToCaptureBtn');
+const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+const clearTagsBtn = document.getElementById('clearTagsBtn');
+const selectionMeta = document.getElementById('selectionMeta');
+const areaOptions = document.getElementById('areaOptions');
+const tagProgress = document.getElementById('tagProgress');
+const tagSummary = document.getElementById('tagSummary');
+const backBtn = document.getElementById('backBtn');
+const analyzeBtn = document.getElementById('analyzeBtn');
 
-let state = loadState();
-let selected = new Set();
+const selected = new Set();
 
-if (!state.start) {
-    window.location.href = 'index.html';
-}
+const ensurePhotos = () => {
+    const state = readState();
+    if (!state.inspection.tailNumber || !state.inspection.startedAt) {
+        window.location.replace('index.html');
+        return null;
+    }
+    if (!state.photos.length) {
+        window.location.replace('capture.html');
+        return null;
+    }
+    return state;
+};
 
-if (state.photos.length === 0) {
-    window.location.href = 'capture.html';
-}
+const updateProgress = () => {
+    const state = readState();
+    const tagged = state.photos.filter((photo) => Boolean(photo.area)).length;
+    const total = state.photos.length;
+    tagProgress.textContent = `${tagged} of ${total} photo${total === 1 ? '' : 's'} tagged`;
+    tagSummary.textContent = `Tail ${state.inspection.tailNumber} · ${state.inspection.inspectionType} inspection`;
+    analyzeBtn.disabled = tagged === 0;
+};
 
-renderProgress();
-renderAreaChips();
-renderPhotoGrid();
-updateAnalyzeState();
+const updateSelectionMeta = () => {
+    const count = selected.size;
+    selectionMeta.textContent =
+        count === 0 ? '0 photos selected' : `${count} photo${count === 1 ? '' : 's'} selected`;
+    const disableAssign = count === 0;
+    areaOptions.querySelectorAll('button').forEach((button) => {
+        button.disabled = disableAssign;
+    });
+    clearTagsBtn.disabled = disableAssign;
+    clearSelectionBtn.disabled = disableAssign;
+};
+
+const toggleSelection = (photoId, forceState) => {
+    if (forceState === true || (!selected.has(photoId) && forceState === undefined)) {
+        selected.add(photoId);
+    } else if (forceState === false || selected.has(photoId)) {
+        selected.delete(photoId);
+    }
+    renderPhotos();
+};
+
+const createPhotoCard = (photo) => {
+    const card = document.createElement('label');
+    card.className = 'select-card';
+    if (selected.has(photo.id)) {
+        card.classList.add('selected');
+    }
+    if (photo.area) {
+        card.classList.add('tagged');
+    }
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'select-checkbox';
+    checkbox.checked = selected.has(photo.id);
+    checkbox.addEventListener('change', (event) => {
+        toggleSelection(photo.id, event.target.checked);
+        event.stopPropagation();
+    });
+
+    const thumb = document.createElement('img');
+    thumb.className = 'photo-thumb';
+    thumb.src = photo.dataURL;
+    thumb.alt = photo.name;
+
+    const areaBadge = document.createElement('span');
+    areaBadge.className = 'area-badge';
+    areaBadge.textContent = photo.area ? `Tagged: ${photo.area}` : 'Area not assigned';
+
+    const footer = document.createElement('footer');
+    footer.innerHTML = `<span class="muted">${photo.name}</span><span>Photo #${photo.number}</span>`;
+
+    card.append(checkbox, thumb, areaBadge, footer);
+    card.addEventListener('click', (event) => {
+        if (event.target === checkbox) return;
+        toggleSelection(photo.id);
+    });
+
+    return card;
+};
+
+const renderPhotos = () => {
+    const state = readState();
+    tagGrid.innerHTML = '';
+
+    if (!state.photos.length) {
+        tagGrid.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        analyzeBtn.disabled = true;
+        return;
+    }
+
+    tagGrid.classList.remove('hidden');
+    emptyState.classList.add('hidden');
+
+    state.photos.forEach((photo) => {
+        tagGrid.appendChild(createPhotoCard(photo));
+    });
+
+    updateProgress();
+    updateSelectionMeta();
+};
+
+const handleAssignArea = (area) => {
+    if (!selected.size) return;
+    setPhotoArea(Array.from(selected), area);
+    renderPhotos();
+};
+
+const handleClearTags = () => {
+    if (!selected.size) return;
+    clearPhotoAreas(Array.from(selected));
+    renderPhotos();
+};
 
 selectAllBtn?.addEventListener('click', () => {
-    const untaggedIds = state.photos.filter(photo => !photo.area).map(photo => photo.id);
-    selected = new Set(untaggedIds);
-    renderPhotoGrid();
+    const state = readState();
+    selected.clear();
+    state.photos
+        .filter((photo) => !photo.area)
+        .forEach((photo) => selected.add(photo.id));
+    renderPhotos();
 });
+
+clearSelectionBtn?.addEventListener('click', () => {
+    selected.clear();
+    renderPhotos();
+});
+
+clearTagsBtn?.addEventListener('click', handleClearTags);
 
 backBtn?.addEventListener('click', () => {
     window.location.href = 'capture.html';
 });
 
 analyzeBtn?.addEventListener('click', () => {
-    if (!hasTaggedPhotos()) {
+    const state = readState();
+    const taggedCount = state.photos.filter((photo) => Boolean(photo.area)).length;
+    if (!taggedCount) {
+        alert('Tag at least one photo before running analysis.');
         return;
     }
-    const detections = generateDetections(state.photos.filter(photo => photo.area));
-    const firstArea = detections[0]?.area ?? null;
-    setDetections(detections, firstArea);
+    setAnalysisStatus('pending');
     window.location.href = 'results.html';
 });
 
-function renderProgress() {
-    const tagged = state.photos.filter(photo => Boolean(photo.area)).length;
-    const total = state.photos.length;
-    tagProgress.innerHTML = `
-        <strong>Tagging progress</strong>
-        <div class="progress-row">
-            <span>Tagged <strong>${tagged}</strong> of <strong>${total}</strong> photos</span>
-            <span>Tail <strong>${state.start.tailNumber}</strong></span>
-            <span>Type <strong>${state.start.inspectionType}</strong></span>
-        </div>
-    `;
-}
+AREAS.forEach((area) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = area;
+    button.disabled = true;
+    button.addEventListener('click', () => handleAssignArea(area));
+    areaOptions.appendChild(button);
+});
 
-function renderPhotoGrid() {
-    state = loadState();
-    tagBody.innerHTML = '';
-
-    const toolbar = document.createElement('div');
-    toolbar.className = 'selection-toolbar';
-    toolbar.innerHTML = `
-        <div class="helper">${selected.size} photo(s) selected</div>
-        <div class="helper">${state.photos.filter(photo => photo.area).length} tagged</div>
-    `;
-    tagBody.appendChild(toolbar);
-
-    const grid = document.createElement('div');
-    grid.className = 'photo-grid';
-
-    state.photos.forEach((photo) => {
-        const tile = document.createElement('div');
-        tile.className = 'photo-tile selectable';
-        if (selected.has(photo.id)) {
-            tile.classList.add('selected');
-        }
-
-        tile.innerHTML = `
-            <div class="photo-thumb" aria-hidden="true"></div>
-            <div class="photo-meta">
-                <strong>Photo ${photo.number}</strong>
-                <span>${photo.name}</span>
-                <span>${photo.area ? `Area: ${photo.area}` : 'Area: Not tagged'}</span>
-            </div>
-        `;
-
-        const thumb = tile.querySelector('.photo-thumb');
-        const preview = photo.dataURL || buildPlaceholderImage(photo.number, photo.name);
-        thumb.style.backgroundImage = `url('${preview}')`;
-        thumb.classList.add('with-image');
-
-        tile.addEventListener('click', () => toggleSelection(photo.id));
-        grid.appendChild(tile);
-    });
-
-    tagBody.appendChild(grid);
-    renderProgress();
-    updateAnalyzeState();
-}
-
-function renderAreaChips() {
-    areaChips.innerHTML = '';
-    AREAS.forEach((area) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'area-chip';
-        button.textContent = area;
-        button.addEventListener('click', () => assignArea(area));
-        areaChips.appendChild(button);
-    });
-}
-
-function toggleSelection(photoId) {
-    if (selected.has(photoId)) {
-        selected.delete(photoId);
-    } else {
-        selected.add(photoId);
-    }
-    renderPhotoGrid();
-}
-
-function assignArea(area) {
-    if (selected.size === 0) {
-        flashSelectionHint();
-        return;
-    }
-    state = updatePhotoArea(Array.from(selected), area);
-    selected.clear();
-    renderPhotoGrid();
-}
-
-function flashSelectionHint() {
-    analyzeBtn.classList.add('ghost');
-    setTimeout(() => analyzeBtn.classList.remove('ghost'), 250);
-}
-
-function hasTaggedPhotos() {
-    return state.photos.some(photo => Boolean(photo.area));
-}
-
-function updateAnalyzeState() {
-    analyzeBtn.disabled = !hasTaggedPhotos();
-}
-
-function generateDetections(taggedPhotos) {
-    const typesByArea = {
-        'Fuselage': ['Rivet Crack', 'Loose Panel', 'Corrosion'],
-        'Left Wing': ['Surface Dent', 'Fastener Out', 'Fuel Stain'],
-        'Right Wing': ['Surface Dent', 'Fastener Out', 'Fuel Stain'],
-        'Tail': ['Control Surface Wear', 'Sealant Voids'],
-        'Landing Gear': ['Hydraulic Leak', 'Wear Indicator'],
-        'Engines': ['Oil Residue', 'Blade Nick', 'Exhaust Soot']
-    };
-
-    const detections = [];
-    taggedPhotos.forEach((photo, index) => {
-        const pool = typesByArea[photo.area] || ['Defect'];
-        const type = pool[index % pool.length];
-        const confidence = Math.round((0.6 + Math.random() * 0.35) * 100) / 100;
-        detections.push({
-            id: `${photo.id}-${index}`,
-            photoId: photo.id,
-            photoNumber: photo.number,
-            area: photo.area,
-            type,
-            confidence,
-            isFalsePositive: false
-        });
-    });
-
-    return detections;
-}
-
-function buildPlaceholderImage(number, label) {
-    const width = 600;
-    const height = 400;
-    const background = 'f5f5f7';
-    const text = encodeURIComponent(label || `Photo ${number}`);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-        <rect width="100%" height="100%" fill="#${background}"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="36" fill="#1b1e2b" opacity="0.45">${text}</text>
-    </svg>`;
-    return `data:image/svg+xml,${svg}`;
+const initialState = ensurePhotos();
+if (initialState) {
+    renderPhotos();
 }
 

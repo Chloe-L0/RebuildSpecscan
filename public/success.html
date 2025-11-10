@@ -3,33 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airplane Inspection · Success</title>
+    <title>SpecScan · Submission Success</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <header>
-        <small>SpecScan</small>
-        <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+<body data-step="6">
+    <header class="app-header">
+        <div class="brand">
+            <span class="badge">SpecScan</span>
+            <h1>Airplane Inspection Console</h1>
+        </div>
+        <div class="step-indicator">
+            <span class="step-label">Step 6 of 6</span>
+            <span class="step-name">Submission Success</span>
+        </div>
     </header>
 
-    <main>
-        <div class="page-shell">
-            <section class="success-card">
-                <div class="success-icon" aria-hidden="true"></div>
-                <div>
-                    <h2>Submission Complete</h2>
-                    <p class="supporting" id="successDetails">Report submitted.</p>
-                </div>
-                <div class="page-actions">
-                    <button class="btn ghost" id="returnHomeBtn" type="button">Return to Home</button>
-                    <button class="btn primary" id="startNewBtn" type="button">Start New Inspection</button>
-                </div>
-            </section>
-        </div>
+    <main class="shell">
+        <section class="success-hero">
+            <div class="success-icon">✓</div>
+            <h2>Inspection Submitted</h2>
+            <p class="muted">Your report has been archived. Share the reference ID below with maintenance operations.</p>
+            <div class="summary-stat" id="reportId">---</div>
+            <div class="muted" id="successMeta"></div>
+            <div class="success-actions">
+                <button class="primary" id="newInspectionBtn">Start New Inspection</button>
+                <button class="secondary" id="returnHomeBtn">Return to Home</button>
+            </div>
+        </section>
     </main>
 
-    <script src="success.js" type="module"></script>
+    <script type="module" src="state.js"></script>
+    <script type="module" src="success.js"></script>
 </body>
 </html>
 

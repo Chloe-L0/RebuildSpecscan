@@ -1,98 +1,386 @@
 import {
-    loadState,
-    setDetections,
-    toggleFalsePositive
+    AREAS,
+    dataURLToFile,
+    readState,
+    recordDetections,
+    resetState,
+    setAnalysisStatus,
+    setAnalysisThreshold,
+    setCurrentAreaView,
+    setCurrentPhotoIndex,
+    summarizeDetectionsByArea,
+    toggleFalsePositive,
+    toInspectionAreaSlug
 } from './state.js';
 
+const statusBanner = document.getElementById('statusBanner');
+const statusTitle = document.getElementById('statusTitle');
+const statusSubtitle = document.getElementById('statusSubtitle');
+const resultMeta = document.getElementById('resultMeta');
+const loadingState = document.getElementById('loadingState');
+const resultsContent = document.getElementById('resultsContent');
 const areaTabs = document.getElementById('areaTabs');
 const resultImage = document.getElementById('resultImage');
 const overlayLayer = document.getElementById('overlayLayer');
-const imageMeta = document.getElementById('imageMeta');
+const viewerMeta = document.getElementById('viewerMeta');
+const viewerSummary = document.getElementById('viewerSummary');
+const thresholdSlider = document.getElementById('thresholdSlider');
+const thresholdValue = document.getElementById('thresholdValue');
+const detectionList = document.getElementById('detectionList');
+const emptyDetectionState = document.getElementById('emptyDetectionState');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
-const slider = document.getElementById('confidenceSlider');
-const sliderValue = document.getElementById('confidenceValue');
-const detectionSummary = document.getElementById('detectionSummary');
-const detectionsList = document.getElementById('detectionsList');
-const emptyState = document.getElementById('emptyState');
 const reorganizeBtn = document.getElementById('reorganizeBtn');
-const continueReportBtn = document.getElementById('continueReportBtn');
+const reportBtn = document.getElementById('reportBtn');
+const startOverBtn = document.getElementById('startOverBtn');
 const saveDraftBtn = document.getElementById('saveDraftBtn');
 
-let state = loadState();
+let activeHighlight = null;
 
-if (!state.start) {
-    window.location.href = 'index.html';
-}
-
-if (state.photos.length === 0) {
-    window.location.href = 'capture.html';
-}
-
-if (!state.detections.length) {
-    const tagged = state.photos.filter(photo => photo.area);
-    if (tagged.length) {
-        const detections = generateDetections(tagged);
-        const firstArea = detections[0]?.area ?? null;
-        state = setDetections(detections, firstArea);
-    } else {
-        window.location.href = 'tag.html';
+const ensureTaggingComplete = () => {
+    const state = readState();
+    if (!state.inspection.tailNumber || !state.inspection.startedAt) {
+        window.location.replace('index.html');
+        return null;
     }
-}
+    if (!state.photos.length) {
+        window.location.replace('capture.html');
+        return null;
+    }
+    const tagged = state.photos.filter((photo) => photo.area);
+    if (!tagged.length) {
+        window.location.replace('tag.html');
+        return null;
+    }
+    return state;
+};
 
-let currentArea = state.areaView || 'All';
-const availableAreas = new Set(state.detections.map(det => det.area));
-if (!availableAreas.has(currentArea) && currentArea !== 'All') {
-    currentArea = 'All';
-}
+const taggedPhotos = (state) => state.photos.filter((photo) => Boolean(photo.area));
 
-let threshold = 0.5;
-let currentPhotoIndex = 0;
+const toggleLoading = (visible) => {
+    loadingState.classList.toggle('hidden', !visible);
+    resultsContent.classList.toggle('hidden', visible);
+};
 
-sliderValue.textContent = `${slider.value}%`;
+const updateStatus = (title, subtitle, meta) => {
+    statusTitle.textContent = title;
+    statusSubtitle.textContent = subtitle;
+    resultMeta.textContent = meta;
+};
 
-renderAreaTabs();
-renderView();
-renderDetections();
-updateNavigation();
-updateSummary();
+const runAnalysis = async () => {
+    const state = readState();
+    const photos = taggedPhotos(state);
+    toggleLoading(true);
+    updateStatus('Running analysis…', 'Roboflow is processing uploaded imagery.', `${photos.length} photo(s)`);
+    setAnalysisStatus('running');
 
-areaTabs?.addEventListener('click', (event) => {
-    const tab = event.target.closest('[data-area]');
-    if (!tab) return;
-    currentArea = tab.dataset.area;
-    currentPhotoIndex = 0;
-    renderAreaTabs();
-    renderView();
-    renderDetections();
-    updateNavigation();
-    updateSummary();
-});
+    const aggregated = [];
 
-slider?.addEventListener('input', (event) => {
+    try {
+        for (const photo of photos) {
+            const file = dataURLToFile(photo.dataURL, photo.name);
+            const formData = new FormData();
+            formData.append('area', toInspectionAreaSlug(photo.area));
+            formData.append('image', file, photo.name);
+
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                body: formData
+            });
+
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload.message || payload.error || `Unexpected error (${response.status})`);
+            }
+
+            const imageWidth = payload.image?.width || payload.imageSize?.w || null;
+            const imageHeight = payload.image?.height || payload.imageSize?.h || null;
+
+            const predictions = Array.isArray(payload.predictions) ? payload.predictions : [];
+            predictions.forEach((prediction, index) => {
+                aggregated.push({
+                    id: `${photo.id}-${index}`,
+                    photoId: photo.id,
+                    photoNumber: photo.number,
+                    area: photo.area,
+                    class: prediction.class || 'Defect',
+                    confidence: typeof prediction.confidence === 'number' ? prediction.confidence : null,
+                    bbox: {
+                        x: prediction.x ?? null,
+                        y: prediction.y ?? null,
+                        width: prediction.width ?? null,
+                        height: prediction.height ?? null,
+                        imageWidth,
+                        imageHeight
+                    },
+                    falsePositive: false
+                });
+            });
+        }
+
+        recordDetections({
+            detections: aggregated,
+            threshold: 0.5
+        });
+
+        const refreshed = readState();
+        const counts = summarizeDetectionsByArea(refreshed);
+        const nonZeroArea = AREAS.find((area) => counts[area] > 0) ?? taggedPhotos(refreshed)[0]?.area ?? AREAS[0];
+        setCurrentAreaView(nonZeroArea);
+        setCurrentPhotoIndex(0);
+        setAnalysisStatus('complete');
+        toggleLoading(false);
+        render();
+    } catch (error) {
+        console.error('Analysis error', error);
+        setAnalysisStatus('error', error.message);
+        toggleLoading(false);
+        updateStatus(
+            'Analysis failed',
+            error.message || 'Something went wrong while contacting Roboflow.',
+            'Retry from Tag step'
+        );
+        alert(error.message || 'Analysis failed. Please verify your Roboflow configuration.');
+    }
+};
+
+const renderTabs = (state) => {
+    const counts = summarizeDetectionsByArea(state);
+    const activeArea = state.analysis.currentArea || AREAS[0];
+    areaTabs.innerHTML = '';
+    AREAS.forEach((area) => {
+        const tab = document.createElement('button');
+        tab.type = 'button';
+        tab.className = `tab${area === activeArea ? ' active' : ''}`;
+        tab.innerHTML = `<span>${area}</span><span class="tab-count">${counts[area] || 0}</span>`;
+        tab.addEventListener('click', () => {
+            setCurrentAreaView(area);
+            setCurrentPhotoIndex(0);
+            render();
+        });
+        areaTabs.appendChild(tab);
+    });
+};
+
+const filterDetections = (state, area, photoId) => {
+    const threshold = state.analysis.threshold;
+    return state.detections.filter((detection) => {
+        if (detection.area !== area) return false;
+        if (photoId !== undefined && detection.photoId !== photoId) return false;
+        if (detection.falsePositive) return false;
+        if (typeof detection.confidence === 'number' && detection.confidence < threshold) return false;
+        return true;
+    });
+};
+
+const renderOverlay = (state, photo) => {
+    overlayLayer.innerHTML = '';
+    if (!photo) return;
+
+    const detections = filterDetections(state, photo.area, photo.id);
+    if (!detections.length) return;
+
+    const rect = resultImage.getBoundingClientRect();
+    const naturalWidth = resultImage.naturalWidth || rect.width;
+    const naturalHeight = resultImage.naturalHeight || rect.height;
+
+    detections.forEach((detection) => {
+        const { bbox } = detection;
+        if (
+            !bbox ||
+            bbox.x == null ||
+            bbox.y == null ||
+            bbox.width == null ||
+            bbox.height == null ||
+            !(bbox.imageWidth || naturalWidth) ||
+            !(bbox.imageHeight || naturalHeight)
+        ) {
+            return;
+        }
+
+        const imageWidth = bbox.imageWidth || naturalWidth;
+        const imageHeight = bbox.imageHeight || naturalHeight;
+        const scaleX = rect.width / imageWidth;
+        const scaleY = rect.height / imageHeight;
+
+        const left = (bbox.x - bbox.width / 2) * scaleX;
+        const top = (bbox.y - bbox.height / 2) * scaleY;
+        const width = bbox.width * scaleX;
+        const height = bbox.height * scaleY;
+
+        const box = document.createElement('div');
+        box.className = 'overlay-box';
+        if (activeHighlight === detection.id) {
+            box.classList.add('highlight');
+        }
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        box.style.width = `${width}px`;
+        box.style.height = `${height}px`;
+        box.dataset.predictionId = detection.id;
+
+        const label = document.createElement('div');
+        label.className = 'label';
+        const confidence = typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : '—';
+        label.textContent = `${detection.class} · ${confidence}`;
+
+        box.appendChild(label);
+        overlayLayer.appendChild(box);
+    });
+};
+
+const renderDetectionList = (state, area, photo) => {
+    detectionList.innerHTML = '';
+    const relevantDetections = filterDetections(state, area);
+    if (!relevantDetections.length) {
+        detectionList.classList.add('hidden');
+        emptyDetectionState.classList.remove('hidden');
+        return;
+    }
+
+    detectionList.classList.remove('hidden');
+    emptyDetectionState.classList.add('hidden');
+    const threshold = Math.round(state.analysis.threshold * 100);
+
+    relevantDetections.forEach((detection) => {
+        const card = document.createElement('article');
+        card.className = 'detection-card';
+        card.dataset.predictionId = detection.id;
+
+        if (detection.falsePositive) {
+            card.dataset.muted = 'true';
+            card.classList.add('false-positive');
+        }
+
+        const title = document.createElement('header');
+        title.innerHTML = `<span>${detection.class}</span><span>${typeof detection.confidence === 'number'
+            ? `${Math.round(detection.confidence * 100)}%`
+            : 'Confidence n/a'}</span>`;
+
+        const meta = document.createElement('div');
+        meta.className = 'detection-meta';
+        meta.innerHTML = `<span>Photo #${detection.photoNumber}</span><span>${detection.area}</span><span>Threshold ≥${threshold}%</span>`;
+
+        const actions = document.createElement('div');
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'ghost';
+        toggle.textContent = detection.falsePositive ? 'Restore Detection' : 'Mark False Positive';
+        toggle.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleFalsePositive(detection.id);
+            render();
+        });
+        actions.appendChild(toggle);
+
+        card.append(title, meta, actions);
+        card.addEventListener('click', () => {
+            activeHighlight = detection.id;
+            render();
+        });
+
+        detectionList.appendChild(card);
+    });
+
+    if (photo) {
+        const highlightExists = relevantDetections.some((det) => det.id === activeHighlight);
+        if (!highlightExists) {
+            activeHighlight = relevantDetections[0]?.id ?? null;
+        }
+    }
+};
+
+const renderViewer = () => {
+    const state = readState();
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+
+    if (!areaPhotos.length) {
+        resultImage.removeAttribute('src');
+        viewerMeta.textContent = 'No photos tagged for this area';
+        viewerSummary.textContent = '';
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        overlayLayer.innerHTML = '';
+        renderDetectionList(state, area);
+        return;
+    }
+
+    let index = state.analysis.currentPhotoIndex ?? 0;
+    if (index < 0) index = 0;
+    if (index > areaPhotos.length - 1) index = areaPhotos.length - 1;
+    setCurrentPhotoIndex(index);
+    const currentPhoto = areaPhotos[index];
+
+    viewerMeta.textContent = `Photo ${index + 1} of ${areaPhotos.length} · #${currentPhoto.number}`;
+    const detectionsForPhoto = filterDetections(state, area, currentPhoto.id);
+    const summary = detectionsForPhoto.length
+        ? `${detectionsForPhoto.length} detection${detectionsForPhoto.length === 1 ? '' : 's'}`
+        : 'No detections';
+    viewerSummary.textContent = summary;
+
+    resultImage.onload = () => renderOverlay(state, currentPhoto);
+    resultImage.src = currentPhoto.dataURL;
+    if (resultImage.complete && resultImage.naturalWidth) {
+        renderOverlay(state, currentPhoto);
+    }
+
+    prevBtn.disabled = index === 0;
+    nextBtn.disabled = index === areaPhotos.length - 1;
+
+    renderDetectionList(state, area, currentPhoto);
+};
+
+const renderThreshold = () => {
+    const state = readState();
+    const thresholdPct = Math.round(state.analysis.threshold * 100);
+    thresholdSlider.value = String(thresholdPct);
+    thresholdValue.textContent = `${thresholdPct}%`;
+};
+
+const render = () => {
+    const state = readState();
+    renderTabs(state);
+    renderThreshold();
+    renderViewer();
+
+    const totalDetections = state.detections.filter((det) => !det.falsePositive).length;
+    const totalPhotos = taggedPhotos(state).length;
+    updateStatus(
+        'Analysis complete',
+        `${totalDetections} detection${totalDetections === 1 ? '' : 's'} across ${totalPhotos} tagged photo${totalPhotos === 1 ? '' : 's'}.`,
+        `Confidence ≥ ${Math.round(state.analysis.threshold * 100)}%`
+    );
+};
+
+thresholdSlider?.addEventListener('input', (event) => {
     const value = Number(event.target.value);
-    sliderValue.textContent = `${value}%`;
-    threshold = value / 100;
-    renderView();
-    renderDetections();
-    updateSummary();
+    const normalized = Math.max(0, Math.min(100, value)) / 100;
+    setAnalysisThreshold(normalized);
+    thresholdValue.textContent = `${Math.round(normalized * 100)}%`;
+    render();
 });
 
 prevBtn?.addEventListener('click', () => {
-    const photos = filteredPhotos();
-    if (currentPhotoIndex > 0) {
-        currentPhotoIndex -= 1;
-        renderView();
-        updateNavigation();
+    const state = readState();
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const nextIndex = Math.max(0, (state.analysis.currentPhotoIndex ?? 0) - 1);
+    if (areaPhotos.length) {
+        setCurrentPhotoIndex(nextIndex);
+        render();
     }
 });
 
 nextBtn?.addEventListener('click', () => {
-    const photos = filteredPhotos();
-    if (currentPhotoIndex < photos.length - 1) {
-        currentPhotoIndex += 1;
-        renderView();
-        updateNavigation();
+    const state = readState();
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const nextIndex = Math.min(areaPhotos.length - 1, (state.analysis.currentPhotoIndex ?? 0) + 1);
+    if (areaPhotos.length) {
+        setCurrentPhotoIndex(nextIndex);
+        render();
     }
 });
 
@@ -100,210 +388,27 @@ reorganizeBtn?.addEventListener('click', () => {
     window.location.href = 'tag.html';
 });
 
-continueReportBtn?.addEventListener('click', () => {
+reportBtn?.addEventListener('click', () => {
     window.location.href = 'report.html';
 });
 
-saveDraftBtn?.addEventListener('click', () => {
-    saveDraftBtn.textContent = 'Draft Saved';
-    saveDraftBtn.disabled = true;
-    setTimeout(() => {
-        saveDraftBtn.textContent = 'Save Draft';
-        saveDraftBtn.disabled = false;
-    }, 1500);
+startOverBtn?.addEventListener('click', () => {
+    resetState();
+    window.location.href = 'index.html';
 });
 
-window.addEventListener('resize', debounce(() => {
-    renderView();
-}, 120));
+saveDraftBtn?.addEventListener('click', () => {
+    alert('Draft saved locally. Submit or export from the Report step to finalize.');
+});
 
-function renderAreaTabs() {
-    const counts = areaCounts();
-    areaTabs.innerHTML = '';
-    const areas = ['All', ...Array.from(counts.keys()).filter(area => area !== 'All')];
-    areas.forEach((area) => {
-        const tab = document.createElement('button');
-        tab.type = 'button';
-        tab.className = 'tab';
-        if (area === currentArea) {
-            tab.classList.add('active');
-            tab.setAttribute('aria-selected', 'true');
-        }
-        tab.setAttribute('role', 'tab');
-        tab.setAttribute('aria-controls', 'detectionsList');
-        tab.dataset.area = area;
-        const badge = counts.get(area) ?? 0;
-        tab.innerHTML = `
-            <span>${area}</span>
-            <span class="badge">${badge}</span>
-        `;
-        areaTabs.appendChild(tab);
-    });
-}
+const initialState = ensureTaggingComplete();
 
-function renderView() {
-    const photos = filteredPhotos();
-    const detections = filteredDetections();
-
-    if (!photos.length) {
-        resultImage.removeAttribute('src');
-        resultImage.setAttribute('alt', 'No photo available');
-        imageMeta.textContent = 'No photos for this area';
-        overlayLayer.innerHTML = '';
-        return;
+if (initialState) {
+    if (initialState.analysis.status === 'complete' && initialState.detections.length) {
+        toggleLoading(false);
+        render();
+    } else {
+        runAnalysis();
     }
-
-    const photo = photos[currentPhotoIndex] || photos[0];
-    imageMeta.textContent = `Photo ${photo.number} · ${photo.name}`;
-    const src = photo.dataURL || buildPlaceholderImage(photo);
-    resultImage.src = src;
-    resultImage.alt = `Inspection photo ${photo.name}`;
-    drawOverlay(photo, detections.filter(det => det.photoId === photo.id));
 }
 
-function renderDetections() {
-    detectionsList.innerHTML = '';
-    const detections = filteredDetections();
-
-    if (!detections.length) {
-        emptyState.classList.remove('hidden');
-        return;
-    }
-    emptyState.classList.add('hidden');
-
-    detections.forEach((detection) => {
-        const card = document.createElement('div');
-        card.className = 'detection-card';
-        if (state.falsePositives.includes(detection.id)) {
-            card.classList.add('muted');
-        }
-        card.innerHTML = `
-            <div class="detection-header">
-                <strong>${detection.type}</strong>
-                <button class="toggle-flag" type="button">${state.falsePositives.includes(detection.id) ? 'Undo Flag' : 'Mark False Positive'}</button>
-            </div>
-            <div class="helper">Confidence ${Math.round(detection.confidence * 100)}% · Photo ${detection.photoNumber} · ${detection.area}</div>
-        `;
-
-        card.querySelector('.toggle-flag')?.addEventListener('click', () => {
-            state = toggleFalsePositive(detection.id);
-            renderDetections();
-            renderView();
-            updateSummary();
-        });
-
-        detectionsList.appendChild(card);
-    });
-}
-
-function updateNavigation() {
-    const photos = filteredPhotos();
-    prevBtn.disabled = currentPhotoIndex === 0;
-    nextBtn.disabled = currentPhotoIndex >= photos.length - 1;
-}
-
-function updateSummary() {
-    const detections = filteredDetections();
-    detectionSummary.textContent = `${detections.length} detection${detections.length === 1 ? '' : 's'} visible`;
-}
-
-function filteredPhotos() {
-    const relevant = currentArea === 'All'
-        ? state.photos
-        : state.photos.filter(photo => photo.area === currentArea);
-    return relevant.length ? relevant : state.photos;
-}
-
-function filteredDetections() {
-    return state.detections.filter((det) => {
-        const areaMatch = currentArea === 'All' || det.area === currentArea;
-        const confidenceMatch = det.confidence >= threshold;
-        return areaMatch && confidenceMatch;
-    });
-}
-
-function areaCounts() {
-    const counts = new Map();
-    state.detections.forEach((det) => {
-        counts.set(det.area, (counts.get(det.area) || 0) + 1);
-    });
-    const total = Array.from(counts.values()).reduce((sum, value) => sum + value, 0);
-    counts.set('All', total);
-    return counts;
-}
-
-function generateDetections(taggedPhotos) {
-    const typesByArea = {
-        'Fuselage': ['Rivet Crack', 'Loose Panel', 'Corrosion'],
-        'Left Wing': ['Surface Dent', 'Fastener Out', 'Fuel Stain'],
-        'Right Wing': ['Surface Dent', 'Fastener Out', 'Fuel Stain'],
-        'Tail': ['Control Surface Wear', 'Sealant Voids'],
-        'Landing Gear': ['Hydraulic Leak', 'Wear Indicator'],
-        'Engines': ['Oil Residue', 'Blade Nick', 'Exhaust Soot']
-    };
-
-    return taggedPhotos.map((photo, index) => {
-        const pool = typesByArea[photo.area] || ['Defect'];
-        return {
-            id: `${photo.id}-${index}`,
-            photoId: photo.id,
-            photoNumber: photo.number,
-            area: photo.area,
-            type: pool[index % pool.length],
-            confidence: Math.round((0.6 + Math.random() * 0.35) * 100) / 100
-        };
-    });
-}
-
-function buildPlaceholderImage(photo) {
-    const width = 800;
-    const height = 520;
-    const background = 'f5f5f7';
-    const text = encodeURIComponent(`Photo ${photo.number}`);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-        <rect width="100%" height="100%" fill="#${background}"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="48" fill="#1b1e2b" opacity="0.45">${text}</text>
-    </svg>`;
-    return `data:image/svg+xml,${svg}`;
-}
-
-function drawOverlay(photo, detections) {
-    overlayLayer.innerHTML = '';
-    if (!detections.length) return;
-    detections.forEach((det, index) => {
-        const [top, left, width, height] = seededBox(det.id, index);
-        const box = document.createElement('div');
-        box.className = 'box';
-        box.style.top = `${top}%`;
-        box.style.left = `${left}%`;
-        box.style.width = `${width}%`;
-        box.style.height = `${height}%`;
-        const label = document.createElement('div');
-        label.className = 'label';
-        label.textContent = `${det.type} · ${Math.round(det.confidence * 100)}%`;
-        box.appendChild(label);
-        overlayLayer.appendChild(box);
-    });
-}
-
-function seededBox(id, offset) {
-    let hash = 0;
-    for (let i = 0; i < id.length; i += 1) {
-        hash = (hash << 5) - hash + id.charCodeAt(i);
-        hash |= 0;
-    }
-    const base = Math.abs(hash + offset * 997);
-    const top = 10 + (base % 60);
-    const left = 10 + ((base >> 3) % 50);
-    const width = 20 + ((base >> 5) % 30);
-    const height = 20 + ((base >> 7) % 35);
-    return [Math.min(top, 70), Math.min(left, 60), width, height];
-}
-
-function debounce(fn, wait) {
-    let timer = null;
-    return (...args) => {
-        window.clearTimeout(timer);
-        timer = window.setTimeout(() => fn.apply(null, args), wait);
-    };
-}

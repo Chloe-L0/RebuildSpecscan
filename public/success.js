@@ -1,40 +1,49 @@
-import { resetState } from './state.js';
+import { generateReportId, readState, resetState, setSubmissionId } from './state.js';
 
-const REPORT_RECEIPT_KEY = 'specscan_report_receipt';
-
-const successDetails = document.getElementById('successDetails');
-const startNewBtn = document.getElementById('startNewBtn');
+const reportIdEl = document.getElementById('reportId');
+const successMeta = document.getElementById('successMeta');
+const newInspectionBtn = document.getElementById('newInspectionBtn');
 const returnHomeBtn = document.getElementById('returnHomeBtn');
 
-const receipt = readReceipt();
+const ensureFlowCompleted = () => {
+    const state = readState();
+    if (!state.inspection.tailNumber || !state.inspection.startedAt) {
+        window.location.replace('index.html');
+        return null;
+    }
+    if (!state.analysis.completed) {
+        window.location.replace('results.html');
+        return null;
+    }
+    return state;
+};
 
-if (receipt) {
-    const submittedAt = new Date(receipt.submittedAt);
-    successDetails.textContent = `Report ${receipt.reportId} for Tail ${receipt.tailNumber} submitted ${submittedAt.toLocaleString()}.`;
-} else {
-    successDetails.textContent = 'Inspection submitted.';
-}
+const renderSuccess = () => {
+    const state = readState();
+    let submissionId = state.analysis.submissionId;
+    if (!submissionId) {
+        submissionId = generateReportId();
+        setSubmissionId(submissionId);
+    }
 
-startNewBtn?.addEventListener('click', () => {
+    const inspector = state.inspection.inspectorName || 'Inspector';
+    const detections = state.detections.filter((detection) => !detection.falsePositive).length;
+    reportIdEl.textContent = submissionId;
+    successMeta.textContent = `${state.inspection.inspectionType} · ${inspector} · ${detections} confirmed detection${detections === 1 ? '' : 's'}`;
+};
+
+newInspectionBtn?.addEventListener('click', () => {
     resetState();
     window.location.href = 'index.html';
 });
 
 returnHomeBtn?.addEventListener('click', () => {
+    resetState();
     window.location.href = 'index.html';
 });
 
-function readReceipt() {
-    try {
-        const raw = sessionStorage.getItem(REPORT_RECEIPT_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        sessionStorage.removeItem(REPORT_RECEIPT_KEY);
-        return parsed;
-    } catch (error) {
-        console.warn('Failed to read report receipt', error);
-        sessionStorage.removeItem(REPORT_RECEIPT_KEY);
-        return null;
-    }
+const initialState = ensureFlowCompleted();
+if (initialState) {
+    renderSuccess();
 }
 

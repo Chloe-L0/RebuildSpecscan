@@ -3,51 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airplane Inspection · Tag</title>
+    <title>SpecScan · Tag Photos</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <header>
-        <small>SpecScan</small>
-        <h1>Airplane Inspection Console</h1>
-        <p>Guide a technician from preparation through reporting while maintaining visual traceability for every aircraft inspection.</p>
+<body data-step="3">
+    <header class="app-header">
+        <div class="brand">
+            <span class="badge">SpecScan</span>
+            <h1>Airplane Inspection Console</h1>
+        </div>
+        <div class="step-indicator">
+            <span class="step-label">Step 3 of 6</span>
+            <span class="step-name">Tag Photos</span>
+        </div>
     </header>
 
-    <main>
-        <div class="page-shell">
-            <section class="panel tag-layout">
-                <div class="step-header">
-                    <span class="step-indicator">Step 3 of 5</span>
-                    <h2>Tag Photos</h2>
-                    <p class="muted">Assign every photo to a structural area so downstream analysis can group detections by aircraft section.</p>
+    <main class="shell">
+        <section class="card">
+            <div class="progress-banner">
+                <div>
+                    <strong id="tagProgress">0 of 0 photos tagged</strong>
+                    <div class="muted" id="tagSummary"></div>
                 </div>
+                <div class="pill">Tag &amp; Organize</div>
+            </div>
 
-                <div class="banner progress-banner" id="tagProgress"></div>
+            <div class="info-banner">
+                <strong>Pro tip:</strong>
+                <span>Select photos, then assign their inspection area. “Select All” only chooses untagged photos to speed up workflow.</span>
+            </div>
 
-                <div class="info-banner">
-                    Select one or many photos, then choose an area on the right. “Select All” affects only untagged photos. You can reassign areas at any time before analysis.
-                </div>
+            <div class="grid-split">
+                <aside class="sticky-selector">
+                    <div class="area-selector">
+                        <div class="muted">Selection</div>
+                        <div class="button-row">
+                            <button class="secondary" id="selectAllBtn">Select All Untagged</button>
+                            <button class="ghost" id="clearSelectionBtn">Clear Selection</button>
+                        </div>
+                        <div class="muted" id="selectionMeta">0 photos selected</div>
+                        <hr>
+                        <div class="muted">Assign Area</div>
+                        <div class="area-options" id="areaOptions"></div>
+                        <button class="ghost" id="clearTagsBtn">Remove Area Tags</button>
+                    </div>
+                </aside>
 
-                <div class="tag-grid">
-                    <div class="tag-body" id="tagBody"></div>
-                    <aside class="area-selector" aria-label="Area selector">
-                        <strong>Assign to area</strong>
-                        <div class="area-chips" id="areaChips"></div>
-                    </aside>
-                </div>
-
-                <div class="page-actions">
-                    <button class="btn ghost" id="backToCaptureBtn" type="button">Back to Capture</button>
-                    <div class="page-actions-right">
-                        <button class="btn" id="selectAllBtn" type="button">Select All Untagged</button>
-                        <button class="btn primary" id="analyzeBtn" type="button" disabled>Analyze All Photos</button>
+                <div>
+                    <div class="select-grid" id="tagGrid"></div>
+                    <div class="empty-state hidden" id="emptyTagState">
+                        <p>No photos available.</p>
+                        <small>Return to capture to add imagery before tagging.</small>
                     </div>
                 </div>
-            </section>
-        </div>
+            </div>
+
+            <footer class="card-footer">
+                <button class="secondary" id="backBtn">Back to Capture</button>
+                <button class="primary" id="analyzeBtn" disabled>Analyze All Photos</button>
+            </footer>
+        </section>
     </main>
 
-    <script src="tag.js" type="module"></script>
+    <script type="module" src="state.js"></script>
+    <script type="module" src="tag.js"></script>
 </body>
 </html>
 
