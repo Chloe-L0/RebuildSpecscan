@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SpecScan · Tag Photos</title>
     <link rel="stylesheet" href="styles.css">
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
 <body data-step="4">
     <header class="app-header">
@@ -44,7 +45,135 @@
                         <div class="muted" id="selectionMeta">0 photos selected</div>
                         <hr>
                         <div class="muted">Assign Area</div>
-                        <div class="area-options" id="areaOptions"></div>
+                        <div id="viewerShell" class="viewer-shell">
+                            <model-viewer
+                                id="areaViewer"
+                                class="plane-viewer area-viewer"
+                                src="/assets/plane.glb"
+                                camera-controls
+                                interaction-prompt="none"
+                                auto-rotate="false"
+                                exposure="1.0"
+                                shadow-intensity="0.25"
+                                camera-orbit="45deg 75deg 5m"
+                                min-camera-orbit="auto 35deg 1m"
+                                max-camera-orbit="auto 100deg 5m"
+                                field-of-view="4deg"
+                                interpolation-decay="20"
+                                tone-mapping="neutral"
+                                ar="false">
+                                <button
+                                    slot="hotspot-fuselage"
+                                    class="area-hotspot"
+                                    data-area="Fuselage"
+                                    data-position="-32.067 0.257 0"
+                                    data-normal="0 1 0"
+                                    data-visibility-attribute="visible">
+                                    Fuselage
+                                </button>
+                                <button
+                                    slot="hotspot-tail-1"
+                                    class="area-hotspot"
+                                    data-area="Tail"
+                                    data-position="47.385 -3.15 -10.76"
+                                    data-normal="0.3 0.5 -1"
+                                    data-visibility-attribute="visible">
+                                    Tail
+                                </button>
+                                <button
+                                    slot="hotspot-tail-2"
+                                    class="area-hotspot"
+                                    data-area="Tail"
+                                    data-position="47.385 -3.15 10.76"
+                                    data-normal="0.3 0.5 1"
+                                    data-visibility-attribute="visible">
+                                    Tail
+                                </button>
+                                <button
+                                    slot="hotspot-left-wing"
+                                    class="area-hotspot"
+                                    data-area="Left Wing"
+                                    data-position="5.683 -5.749 43"
+                                    data-normal="-0.1 1 0"
+                                    data-visibility-attribute="visible">
+                                    Left Wing
+                                </button>
+                                <button
+                                    slot="hotspot-right-wing"
+                                    class="area-hotspot"
+                                    data-area="Right Wing"
+                                    data-position="7.242 -6.202 -43.406"
+                                    data-normal="-0.1 1 0"
+                                    data-visibility-attribute="visible">
+                                    Right Wing
+                                </button>
+                                <button
+                                    slot="hotspot-landing-gear-1"
+                                    class="area-hotspot"
+                                    data-area="Landing Gear"
+                                    data-position="-8.193 -14.941 9.613"
+                                    data-normal="0 1 0"
+                                    data-visibility-attribute="visible">
+                                    Landing Gear
+                                </button>
+                                <button
+                                    slot="hotspot-landing-gear-2"
+                                    class="area-hotspot"
+                                    data-area="Landing Gear"
+                                    data-position="-8.193 -14.941 -9.613"
+                                    data-normal="0 1 0"
+                                    data-visibility-attribute="visible">
+                                    Landing Gear
+                                </button>
+                                <button
+                                    slot="hotspot-landing-gear-3"
+                                    class="area-hotspot"
+                                    data-area="Landing Gear"
+                                    data-position="-42.714 -14.941 0"
+                                    data-normal="-0.4 1 0"
+                                    data-visibility-attribute="visible">
+                                    Landing Gear
+                                </button>
+                                <button
+                                    slot="hotspot-engine-1"
+                                    class="area-hotspot"
+                                    data-area="Engines"
+                                    data-position="-11.921 -8.354 -30.852"
+                                    data-normal="-0.2 1 -0.5"
+                                    data-visibility-attribute="visible">
+                                    Engines
+                                </button>
+                                <button
+                                    slot="hotspot-engine-2"
+                                    class="area-hotspot"
+                                    data-area="Engines"
+                                    data-position="-22.209 -9.186 -17.161"
+                                    data-normal="-0.2 1 -0.5"
+                                    data-visibility-attribute="visible">
+                                    Engines
+                                </button>
+                                <button
+                                    slot="hotspot-engine-3"
+                                    class="area-hotspot"
+                                    data-area="Engines"
+                                    data-position="-22.209 -9.186 17.161"
+                                    data-normal="-0.2 1 0.5"
+                                    data-visibility-attribute="visible">
+                                    Engines
+                                </button>
+                                <button
+                                    slot="hotspot-engine-4"
+                                    class="area-hotspot"
+                                    data-area="Engines"
+                                    data-position="-11.921 -8.354 30.852"
+                                    data-normal="-0.2 1 0.5"
+                                    data-visibility-attribute="visible">
+                                    Engines
+                                </button>
+                            </model-viewer>
+                            <div id="hotspotLayer" class="overlay-layer" dir="ltr"></div>
+                        </div>
+                        <small class="muted area-hint">Click a hotspot to assign the selected photos.</small>
                         <button class="ghost" id="clearTagsBtn">Remove Area Tags</button>
                     </div>
                 </aside>
@@ -60,7 +189,7 @@
 
             <footer class="card-footer">
                 <button class="secondary" id="backBtn">Back to Capture</button>
-                <button class="primary" id="analyzeBtn" disabled>Analyze All Photos</button>
+                <button class="primary" id="nextBtn" disabled>Next</button>
             </footer>
         </section>
     </main>
