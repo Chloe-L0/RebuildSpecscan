@@ -13,6 +13,68 @@ import {
     toInspectionAreaSlug
 } from './state.js';
 
+const THUMBNAIL_HEIGHT = 140;
+
+const clampNumber = (value, min, max) => {
+    if (Number.isNaN(value)) return min;
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+};
+
+const thumbnailCache = new Map();
+
+const createCroppedThumbnail = (dataURL, bbox) =>
+    new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+            const imageWidth = image.naturalWidth || image.width;
+            const imageHeight = image.naturalHeight || image.height;
+            const width = bbox?.width ?? bbox?.w ?? null;
+            const height = bbox?.height ?? bbox?.h ?? null;
+            const centerX = bbox?.centerX ?? bbox?.x ?? null;
+            const centerY = bbox?.centerY ?? bbox?.y ?? null;
+
+            if (!width || !height || !centerX || !centerY || !imageWidth || !imageHeight) {
+                resolve({ src: dataURL, width: THUMBNAIL_HEIGHT });
+                return;
+            }
+
+            const cropWidth = Math.max(width, imageWidth * 0.08);
+            const cropHeight = Math.max(height, imageHeight * 0.08);
+            const cropLeft = clampNumber(centerX - cropWidth / 2, 0, imageWidth - cropWidth);
+            const cropTop = clampNumber(centerY - cropHeight / 2, 0, imageHeight - cropHeight);
+
+            const scale = THUMBNAIL_HEIGHT / cropHeight;
+            const targetHeight = THUMBNAIL_HEIGHT;
+            const targetWidth = clampNumber(Math.round(cropWidth * scale), targetHeight * 0.6, targetHeight * 2.2);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(targetWidth);
+            canvas.height = Math.round(targetHeight);
+            const ctx = canvas.getContext('2d', { alpha: true });
+            if (!ctx) {
+                resolve({ src: dataURL, width: targetHeight });
+                return;
+            }
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(
+                image,
+                cropLeft,
+                cropTop,
+                cropWidth,
+                cropHeight,
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+            resolve({ src: canvas.toDataURL('image/png'), width: canvas.width });
+        };
+        image.onerror = reject;
+        image.src = dataURL;
+    });
+
 const statusBanner = document.getElementById('statusBanner');
 const statusTitle = document.getElementById('statusTitle');
 const statusSubtitle = document.getElementById('statusSubtitle');
@@ -75,6 +137,7 @@ const runAnalysis = async () => {
     updateStatus('Running analysis…', 'Roboflow is processing uploaded imagery.', `${photos.length} photo(s)`);
     setAnalysisStatus('running');
 
+    thumbnailCache.clear();
     const aggregated = [];
 
     try {
@@ -176,12 +239,13 @@ const renderTabs = (state) => {
     });
 };
 
-const filterDetections = (state, area, photoId) => {
+const filterDetections = (state, area, options = {}) => {
+    const { photoId, includeFalsePositives = false } = options;
     const threshold = state.analysis.threshold;
     return state.detections.filter((detection) => {
         if (detection.area !== area) return false;
         if (photoId !== undefined && detection.photoId !== photoId) return false;
-        if (detection.falsePositive) return false;
+        if (!includeFalsePositives && detection.falsePositive) return false;
         if (typeof detection.confidence === 'number' && detection.confidence < threshold) return false;
         return true;
     });
@@ -191,7 +255,7 @@ const renderOverlay = (state, photo) => {
     overlayLayer.innerHTML = '';
     if (!photo) return;
 
-    const detections = filterDetections(state, photo.area, photo.id);
+    const detections = filterDetections(state, photo.area, { photoId: photo.id });
     if (!detections.length) return;
 
     const rect = resultImage.getBoundingClientRect();
@@ -245,7 +309,7 @@ const renderOverlay = (state, photo) => {
 
 const renderDetectionList = (state, area, photo) => {
     detectionList.innerHTML = '';
-    const relevantDetections = filterDetections(state, area);
+    const relevantDetections = filterDetections(state, area, { includeFalsePositives: true });
     if (!relevantDetections.length) {
         detectionList.classList.add('hidden');
         emptyDetectionState.classList.remove('hidden');
@@ -266,11 +330,53 @@ const renderDetectionList = (state, area, photo) => {
             card.classList.add('false-positive');
         }
 
+        const thumbWrapper = document.createElement('div');
+        thumbWrapper.className = 'detection-thumb';
+
+        const photo = state.photos.find((p) => p.id === detection.photoId);
+        if (photo?.dataURL) {
+            const thumbImg = document.createElement('img');
+            thumbImg.alt = `${detection.class || 'Defect'} thumbnail`;
+            thumbImg.loading = 'lazy';
+            thumbWrapper.appendChild(thumbImg);
+
+            const cacheKey = detection.id;
+            const cached = thumbnailCache.get(cacheKey);
+            if (cached) {
+                thumbImg.src = cached.src;
+                thumbWrapper.style.width = `${cached.width}px`;
+            } else {
+                thumbWrapper.style.width = `${THUMBNAIL_HEIGHT}px`;
+                createCroppedThumbnail(photo.dataURL, detection.bbox)
+                    .then((result) => {
+                        thumbnailCache.set(cacheKey, result);
+                        thumbImg.src = result.src;
+                        thumbWrapper.style.width = `${result.width}px`;
+                    })
+                    .catch(() => {
+                        thumbImg.src = photo.dataURL;
+                        thumbWrapper.style.width = `${THUMBNAIL_HEIGHT}px`;
+                    });
+            }
+        } else {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'thumb-placeholder';
+            placeholder.textContent = 'No preview';
+            thumbWrapper.appendChild(placeholder);
+            thumbWrapper.style.width = `${THUMBNAIL_HEIGHT}px`;
+        }
+
+        card.appendChild(thumbWrapper);
+
+        const body = document.createElement('div');
+        body.className = 'detection-body';
+
         const title = document.createElement('header');
         const confidenceValue =
             typeof detection.confidence === 'number' ? Math.round(detection.confidence * 100) : null;
         const confidenceLabel = confidenceValue != null ? `${confidenceValue}%` : 'Confidence n/a';
         title.innerHTML = `<span>${detection.class}</span><span>${confidenceLabel}</span>`;
+        body.appendChild(title);
 
         const meta = document.createElement('div');
         meta.className = 'detection-meta';
@@ -303,20 +409,36 @@ const renderDetectionList = (state, area, photo) => {
             meta.appendChild(coordsSpan);
         }
 
+        if (detection.falsePositive) {
+            const flag = document.createElement('span');
+            flag.className = 'meta-flag';
+            flag.textContent = 'False positive';
+            meta.appendChild(flag);
+        }
+
+        body.appendChild(meta);
+
         const actions = document.createElement('div');
+        actions.className = 'detection-actions';
         const toggle = document.createElement('button');
         toggle.type = 'button';
-        toggle.className = 'ghost';
-        toggle.textContent = detection.falsePositive ? 'Restore Detection' : 'Mark False Positive';
+        toggle.className = 'ghost toggle-icon';
+        toggle.setAttribute('aria-label', detection.falsePositive ? 'Restore detection' : 'Mark false positive');
+        toggle.textContent = detection.falsePositive ? '↻' : '×';
         toggle.addEventListener('click', (event) => {
             event.stopPropagation();
+            if (!detection.falsePositive && activeHighlight === detection.id) {
+                activeHighlight = null;
+            }
             toggleFalsePositive(detection.id);
             render();
         });
         actions.appendChild(toggle);
 
-        card.append(title, meta, actions);
+        body.appendChild(actions);
+        card.appendChild(body);
         card.addEventListener('click', () => {
+            if (detection.falsePositive) return;
             activeHighlight = detection.id;
             render();
         });
@@ -325,9 +447,10 @@ const renderDetectionList = (state, area, photo) => {
     });
 
     if (photo) {
-        const highlightExists = relevantDetections.some((det) => det.id === activeHighlight);
+        const highlightExists = relevantDetections.some((det) => det.id === activeHighlight && !det.falsePositive);
         if (!highlightExists) {
-            activeHighlight = relevantDetections[0]?.id ?? null;
+            const firstActive = relevantDetections.find((det) => !det.falsePositive);
+            activeHighlight = firstActive?.id ?? relevantDetections[0]?.id ?? null;
         }
     }
 };
@@ -355,7 +478,7 @@ const renderViewer = () => {
     const currentPhoto = areaPhotos[index];
 
     viewerMeta.textContent = `Photo ${index + 1} of ${areaPhotos.length} · #${currentPhoto.number}`;
-    const detectionsForPhoto = filterDetections(state, area, currentPhoto.id);
+    const detectionsForPhoto = filterDetections(state, area, { photoId: currentPhoto.id });
     const summary = detectionsForPhoto.length
         ? `${detectionsForPhoto.length} detection${detectionsForPhoto.length === 1 ? '' : 's'}`
         : 'No detections';
