@@ -82,6 +82,7 @@ const runAnalysis = async () => {
             const file = dataURLToFile(photo.dataURL, photo.name);
             const formData = new FormData();
             formData.append('area', toInspectionAreaSlug(photo.area));
+            formData.append('confidence', '1');
             formData.append('image', file, photo.name);
 
             const response = await fetch('/api/analyze', {
@@ -99,18 +100,30 @@ const runAnalysis = async () => {
 
             const predictions = Array.isArray(payload.predictions) ? payload.predictions : [];
             predictions.forEach((prediction, index) => {
+                const numericConfidence =
+                    typeof prediction.confidence === 'number'
+                        ? prediction.confidence
+                        : typeof prediction.confidence_percent === 'number'
+                        ? prediction.confidence_percent / 100
+                        : null;
+
+                const centerX = prediction.x_center ?? prediction.x ?? null;
+                const centerY = prediction.y_center ?? prediction.y ?? null;
+
                 aggregated.push({
                     id: `${photo.id}-${index}`,
                     photoId: photo.id,
                     photoNumber: photo.number,
                     area: photo.area,
                     class: prediction.class || 'Defect',
-                    confidence: typeof prediction.confidence === 'number' ? prediction.confidence : null,
+                    confidence: numericConfidence,
                     bbox: {
-                        x: prediction.x ?? null,
-                        y: prediction.y ?? null,
-                        width: prediction.width ?? null,
-                        height: prediction.height ?? null,
+                        x: prediction.x ?? prediction.x_center ?? null,
+                        y: prediction.y ?? prediction.y_center ?? null,
+                        width: prediction.width ?? prediction.w ?? null,
+                        height: prediction.height ?? prediction.h ?? null,
+                        centerX,
+                        centerY,
                         imageWidth,
                         imageHeight
                     },
@@ -254,13 +267,41 @@ const renderDetectionList = (state, area, photo) => {
         }
 
         const title = document.createElement('header');
-        title.innerHTML = `<span>${detection.class}</span><span>${typeof detection.confidence === 'number'
-            ? `${Math.round(detection.confidence * 100)}%`
-            : 'Confidence n/a'}</span>`;
+        const confidenceValue =
+            typeof detection.confidence === 'number' ? Math.round(detection.confidence * 100) : null;
+        const confidenceLabel = confidenceValue != null ? `${confidenceValue}%` : 'Confidence n/a';
+        title.innerHTML = `<span>${detection.class}</span><span>${confidenceLabel}</span>`;
 
         const meta = document.createElement('div');
         meta.className = 'detection-meta';
-        meta.innerHTML = `<span>Photo #${detection.photoNumber}</span><span>${detection.area}</span><span>Threshold ≥${threshold}%</span>`;
+
+        const photoSpan = document.createElement('span');
+        photoSpan.textContent = `Photo #${detection.photoNumber}`;
+
+        const areaSpan = document.createElement('span');
+        areaSpan.textContent = detection.area;
+
+        const thresholdSpan = document.createElement('span');
+        thresholdSpan.textContent = `Threshold ≥${threshold}%`;
+
+        meta.append(photoSpan, areaSpan, thresholdSpan);
+
+        const coordsText = (() => {
+            const box = detection.bbox || {};
+            if (box.centerX != null && box.centerY != null) {
+                return `Center: (${Math.round(box.centerX)}, ${Math.round(box.centerY)})`;
+            }
+            if (box.x != null && box.y != null) {
+                return `Position: (${Math.round(box.x)}, ${Math.round(box.y)})`;
+            }
+            return '';
+        })();
+
+        if (coordsText) {
+            const coordsSpan = document.createElement('span');
+            coordsSpan.textContent = coordsText;
+            meta.appendChild(coordsSpan);
+        }
 
         const actions = document.createElement('div');
         const toggle = document.createElement('button');
