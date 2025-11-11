@@ -1,10 +1,10 @@
-# ✈️ Airplane Inspection App
+# Airplane Inspection App
 
 Predictive maintenance inspections made simple with SpecScan — a mobile-first web application that guides technicians through a three-step workflow and leverages Roboflow’s hosted inference API for defect detection.
 
 ---
 
-## 🚀 Features
+## Features
 
 - **3-Step Inspection Flow**
   1. Select airplane area (Fuselage, Wings, Tail, Landing Gear, Engine)
@@ -20,7 +20,7 @@ Predictive maintenance inspections made simple with SpecScan — a mobile-first 
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 SpecScan_v1/
@@ -41,7 +41,7 @@ SpecScan_v1/
 
 ---
 
-## 🌐 Environment Variables
+## Environment Variables
 
 Create `backend/.env`:
 
@@ -57,7 +57,7 @@ PORT=3000
 
 ---
 
-## 🛠️ Installation & Setup
+## Installation & Setup
 
 ```bash
 npm install
@@ -78,7 +78,7 @@ npm run dev
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ```bash
 npm test
@@ -91,7 +91,7 @@ npm test
 
 ---
 
-## 🧩 Implementation Notes
+## Implementation Notes
 
 - **Server (`server.js`)**
   - Express app with CORS, body parsing, static asset serving, and `morgan` request logging.
@@ -120,7 +120,7 @@ npm test
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 - **Missing credentials:** Ensure `backend/.env` is present and restart the server after changes.
 - **Port 3000 busy:** Update `PORT` in `backend/.env`.
@@ -129,11 +129,11 @@ npm test
 
 ---
 
-## 📄 License
+## License
 
 MIT License — adapt for your own predictive maintenance workflows.
 
 ---
 
-**Happy Inspecting! ✈️**
+
 

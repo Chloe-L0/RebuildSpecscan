@@ -87,14 +87,14 @@ const ROBOFLOW_MODEL_VERSION = resolvedModelId.split('/')[1] || 'UNSPECIFIED';
 const ROBOFLOW_API_URL = `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}`;
 
 // Debug: Log configuration on startup
-console.log('\n🔧 Configuration Check:');
+console.log('\n Configuration Check:');
 console.log(`   PORT: ${PORT}`);
 console.log(`   API_KEY loaded: ${ROBOFLOW_API_KEY !== 'YOUR_KEY_HERE' ? '✅ Yes' : '❌ No (using placeholder)'}`);
 console.log(`   MODEL_ID loaded: ${ROBOFLOW_MODEL_ID !== 'YOUR_MODEL_ID_HERE' ? '✅ Yes' : '❌ No (using placeholder)'}`);
 console.log(`   MODEL_VERSION: ${ROBOFLOW_MODEL_VERSION}`);
 console.log(`   .env path: ${ENV_PATH}\n`);
 
-// ========================================
+// =======================================
 // API ENDPOINTS
 // ========================================
 
@@ -341,11 +341,11 @@ if (process.env.NODE_ENV !== 'test') {
 ║   Airplane Inspection App - Server    ║
 ╚═══════════════════════════════════════╝
     
-🚀 Server running on: http://localhost:${PORT}
-📱 Mobile access: http://[YOUR_IP]:${PORT}
-🌐 Browser access: http://localhost:${PORT}
+ Server running on: http://localhost:${PORT}
+ Mobile access: http://[YOUR_IP]:${PORT}
+ Browser access: http://localhost:${PORT}
 
-⚠️  Configuration Status:
+ Configuration Status:
    ${ROBOFLOW_API_KEY !== 'YOUR_KEY_HERE' ? '✅' : '❌'} ROBOFLOW_API_KEY ${ROBOFLOW_API_KEY !== 'YOUR_KEY_HERE' ? 'configured' : 'NOT configured'}
    ${ROBOFLOW_MODEL_ID !== 'YOUR_MODEL_ID_HERE' ? '✅' : '❌'} ROBOFLOW_MODEL_ID ${ROBOFLOW_MODEL_ID !== 'YOUR_MODEL_ID_HERE' ? 'configured' : 'NOT configured'}
    

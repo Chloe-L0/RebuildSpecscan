@@ -99,6 +99,24 @@ const saveDraftBtn = document.getElementById('saveDraftBtn');
 
 let activeHighlight = null;
 
+// Resize handler for updating bounding boxes when window is resized
+let resizeTimeout;
+const handleWindowResize = () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        const state = readState();
+        const area = state.analysis.currentArea || AREAS[0];
+        const areaPhotos = state.photos.filter((photo) => photo.area === area);
+        if (areaPhotos.length) {
+            const index = state.analysis.currentPhotoIndex ?? 0;
+            const currentPhoto = areaPhotos[index];
+            if (currentPhoto && resultImage.complete && resultImage.naturalWidth && resultImage.naturalHeight) {
+                renderOverlay(state, currentPhoto);
+            }
+        }
+    }, 100);
+};
+
 const ensureTaggingComplete = () => {
     const state = readState();
     if (!state.inspection.tailNumber || !state.inspection.startedAt) {
@@ -253,48 +271,95 @@ const filterDetections = (state, area, options = {}) => {
 
 const renderOverlay = (state, photo) => {
     overlayLayer.innerHTML = '';
-    if (!photo) return;
+    if (!photo || !resultImage.complete) return;
 
     const detections = filterDetections(state, photo.area, { photoId: photo.id });
     if (!detections.length) return;
 
-    const rect = resultImage.getBoundingClientRect();
-    const naturalWidth = resultImage.naturalWidth || rect.width;
-    const naturalHeight = resultImage.naturalHeight || rect.height;
+    // Get the container (viewer-stage) dimensions
+    const container = overlayLayer.parentElement;
+    const containerRect = container.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
+
+    // Get the actual displayed image element dimensions and position from DOM
+    const imageRect = resultImage.getBoundingClientRect();
+    const displayedImageWidth = imageRect.width;
+    const displayedImageHeight = imageRect.height;
+
+    // Calculate image offset relative to container (accounting for container's viewport position)
+    // Since overlay is positioned absolutely within container, we need container-relative coordinates
+    const imageOffsetX = imageRect.left - containerRect.left;
+    const imageOffsetY = imageRect.top - containerRect.top;
+
+    // Get the natural/original image dimensions
+    const imageNaturalWidth = resultImage.naturalWidth;
+    const imageNaturalHeight = resultImage.naturalHeight;
+
+    if (!imageNaturalWidth || !imageNaturalHeight || !displayedImageWidth || !displayedImageHeight) {
+        console.warn('Image dimensions not available', {
+            natural: { width: imageNaturalWidth, height: imageNaturalHeight },
+            displayed: { width: displayedImageWidth, height: displayedImageHeight }
+        });
+        return;
+    }
 
     detections.forEach((detection) => {
         const { bbox } = detection;
         if (
             !bbox ||
-            bbox.x == null ||
-            bbox.y == null ||
             bbox.width == null ||
-            bbox.height == null ||
-            !(bbox.imageWidth || naturalWidth) ||
-            !(bbox.imageHeight || naturalHeight)
+            bbox.height == null
         ) {
             return;
         }
 
-        const imageWidth = bbox.imageWidth || naturalWidth;
-        const imageHeight = bbox.imageHeight || naturalHeight;
-        const scaleX = rect.width / imageWidth;
-        const scaleY = rect.height / imageHeight;
+        // Get the source image dimensions from API response
+        // Roboflow API returns image dimensions in the response
+        // If not available, use natural image dimensions as fallback
+        const sourceImageWidth = bbox.imageWidth || imageNaturalWidth;
+        const sourceImageHeight = bbox.imageHeight || imageNaturalHeight;
 
-        const left = (bbox.x - bbox.width / 2) * scaleX;
-        const top = (bbox.y - bbox.height / 2) * scaleY;
-        const width = bbox.width * scaleX;
-        const height = bbox.height * scaleY;
+        // Roboflow API returns center-based coordinates (x_center, y_center, width, height)
+        // Coordinates are in pixels relative to sourceImageWidth × sourceImageHeight
+        const centerX = bbox.centerX !== undefined ? bbox.centerX : (bbox.x !== undefined ? bbox.x : null);
+        const centerY = bbox.centerY !== undefined ? bbox.centerY : (bbox.y !== undefined ? bbox.y : null);
+
+        if (centerX == null || centerY == null) {
+            console.warn('Missing center coordinates for detection', detection.id);
+            return;
+        }
+
+        // Calculate scale factors from API image dimensions to displayed image dimensions
+        // API coordinates are relative to sourceImageWidth × sourceImageHeight
+        // Displayed image has dimensions displayedImageWidth × displayedImageHeight (from DOM, already accounts for object-fit: contain)
+        const scaleX = displayedImageWidth / sourceImageWidth;
+        const scaleY = displayedImageHeight / sourceImageHeight;
+
+        // Scale coordinates from API dimensions to displayed dimensions
+        const scaledCenterX = centerX * scaleX;
+        const scaledCenterY = centerY * scaleY;
+        const scaledWidth = bbox.width * scaleX;
+        const scaledHeight = bbox.height * scaleY;
+
+        // Convert center-based coordinates to top-left coordinates
+        // Add image offset to account for image position within the container
+        const left = imageOffsetX + scaledCenterX - (scaledWidth / 2);
+        const top = imageOffsetY + scaledCenterY - (scaledHeight / 2);
 
         const box = document.createElement('div');
         box.className = 'overlay-box';
-        if (activeHighlight === detection.id) {
+        const isHighlighted = activeHighlight === detection.id;
+        if (isHighlighted) {
             box.classList.add('highlight');
+            box.style.borderWidth = '4px';
+        } else {
+            box.style.borderWidth = '3px';
         }
         box.style.left = `${left}px`;
         box.style.top = `${top}px`;
-        box.style.width = `${width}px`;
-        box.style.height = `${height}px`;
+        box.style.width = `${scaledWidth}px`;
+        box.style.height = `${scaledHeight}px`;
         box.dataset.predictionId = detection.id;
 
         const label = document.createElement('div');
@@ -309,7 +374,12 @@ const renderOverlay = (state, photo) => {
 
 const renderDetectionList = (state, area, photo) => {
     detectionList.innerHTML = '';
-    const relevantDetections = filterDetections(state, area, { includeFalsePositives: true });
+    // Filter detections by area and current photo (if photo is provided)
+    const filterOptions = { includeFalsePositives: true };
+    if (photo) {
+        filterOptions.photoId = photo.id;
+    }
+    const relevantDetections = filterDetections(state, area, filterOptions);
     if (!relevantDetections.length) {
         detectionList.classList.add('hidden');
         emptyDetectionState.classList.remove('hidden');
@@ -325,6 +395,11 @@ const renderDetectionList = (state, area, photo) => {
         card.className = 'detection-card';
         card.dataset.predictionId = detection.id;
 
+        // Add highlight class if this detection is currently highlighted
+        if (activeHighlight === detection.id && !detection.falsePositive) {
+            card.classList.add('highlighted');
+        }
+
         if (detection.falsePositive) {
             card.dataset.muted = 'true';
             card.classList.add('false-positive');
@@ -332,9 +407,10 @@ const renderDetectionList = (state, area, photo) => {
 
         const thumbWrapper = document.createElement('div');
         thumbWrapper.className = 'detection-thumb';
+        // Thumbnails are fixed at 80px × 80px via CSS - no need to set inline styles
 
-        const photo = state.photos.find((p) => p.id === detection.photoId);
-        if (photo?.dataURL) {
+        const detectionPhoto = state.photos.find((p) => p.id === detection.photoId);
+        if (detectionPhoto?.dataURL) {
             const thumbImg = document.createElement('img');
             thumbImg.alt = `${detection.class || 'Defect'} thumbnail`;
             thumbImg.loading = 'lazy';
@@ -344,18 +420,14 @@ const renderDetectionList = (state, area, photo) => {
             const cached = thumbnailCache.get(cacheKey);
             if (cached) {
                 thumbImg.src = cached.src;
-                thumbWrapper.style.width = `${cached.width}px`;
             } else {
-                thumbWrapper.style.width = `${THUMBNAIL_HEIGHT}px`;
-                createCroppedThumbnail(photo.dataURL, detection.bbox)
+                createCroppedThumbnail(detectionPhoto.dataURL, detection.bbox)
                     .then((result) => {
                         thumbnailCache.set(cacheKey, result);
                         thumbImg.src = result.src;
-                        thumbWrapper.style.width = `${result.width}px`;
                     })
                     .catch(() => {
-                        thumbImg.src = photo.dataURL;
-                        thumbWrapper.style.width = `${THUMBNAIL_HEIGHT}px`;
+                        thumbImg.src = detectionPhoto.dataURL;
                     });
             }
         } else {
@@ -363,7 +435,6 @@ const renderDetectionList = (state, area, photo) => {
             placeholder.className = 'thumb-placeholder';
             placeholder.textContent = 'No preview';
             thumbWrapper.appendChild(placeholder);
-            thumbWrapper.style.width = `${THUMBNAIL_HEIGHT}px`;
         }
 
         card.appendChild(thumbWrapper);
@@ -441,6 +512,13 @@ const renderDetectionList = (state, area, photo) => {
             if (detection.falsePositive) return;
             activeHighlight = detection.id;
             render();
+            // Scroll the highlighted card into view after render completes
+            requestAnimationFrame(() => {
+                const highlightedCard = detectionList.querySelector(`[data-prediction-id="${detection.id}"]`);
+                if (highlightedCard) {
+                    highlightedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
         });
 
         detectionList.appendChild(card);
@@ -448,9 +526,15 @@ const renderDetectionList = (state, area, photo) => {
 
     if (photo) {
         const highlightExists = relevantDetections.some((det) => det.id === activeHighlight && !det.falsePositive);
-        if (!highlightExists) {
+        if (!highlightExists && relevantDetections.length > 0) {
             const firstActive = relevantDetections.find((det) => !det.falsePositive);
             activeHighlight = firstActive?.id ?? relevantDetections[0]?.id ?? null;
+            // Re-render overlay if highlight changed
+            if (activeHighlight !== null) {
+                renderOverlay(state, photo);
+            }
+        } else if (relevantDetections.length === 0) {
+            activeHighlight = null;
         }
     }
 };
@@ -484,10 +568,26 @@ const renderViewer = () => {
         : 'No detections';
     viewerSummary.textContent = summary;
 
-    resultImage.onload = () => renderOverlay(state, currentPhoto);
+    // Set up image load handler
+    const handleImageLoad = () => {
+        // Wait for layout to be ready before rendering overlay
+        requestAnimationFrame(() => {
+            renderOverlay(state, currentPhoto);
+        });
+    };
+
+    resultImage.onload = handleImageLoad;
     resultImage.src = currentPhoto.dataURL;
-    if (resultImage.complete && resultImage.naturalWidth) {
-        renderOverlay(state, currentPhoto);
+    
+    // If image is already loaded, render overlay immediately
+    if (resultImage.complete && resultImage.naturalWidth && resultImage.naturalHeight) {
+        handleImageLoad();
+    }
+
+    // Ensure resize handler is set up (only once)
+    if (!window.__resultsResizeHandlerAttached) {
+        window.addEventListener('resize', handleWindowResize);
+        window.__resultsResizeHandlerAttached = true;
     }
 
     prevBtn.disabled = index === 0;
