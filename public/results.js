@@ -15,6 +15,29 @@ import {
 
 const THUMBNAIL_HEIGHT = 140;
 
+// Color palette for different defect classes
+const DEFECT_COLORS = [
+    { border: '#e11d48', bg: 'rgba(225, 29, 72, 0.18)', label: '#e11d48' }, // Red
+    { border: '#2563eb', bg: 'rgba(37, 99, 235, 0.18)', label: '#2563eb' }, // Blue
+    { border: '#059669', bg: 'rgba(5, 150, 105, 0.18)', label: '#059669' }, // Green
+    { border: '#d97706', bg: 'rgba(217, 119, 6, 0.18)', label: '#d97706' }, // Orange
+    { border: '#7c3aed', bg: 'rgba(124, 58, 237, 0.18)', label: '#7c3aed' }, // Purple
+    { border: '#dc2626', bg: 'rgba(220, 38, 38, 0.18)', label: '#dc2626' }, // Dark Red
+    { border: '#0284c7', bg: 'rgba(2, 132, 199, 0.18)', label: '#0284c7' }, // Cyan
+    { border: '#ca8a04', bg: 'rgba(202, 138, 4, 0.18)', label: '#ca8a04' }  // Amber
+];
+
+const getColorForClass = (className) => {
+    if (!className) return DEFECT_COLORS[0];
+    // Hash the class name to get a consistent color
+    let hash = 0;
+    for (let i = 0; i < className.length; i++) {
+        hash = className.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const index = Math.abs(hash) % DEFECT_COLORS.length;
+    return DEFECT_COLORS[index];
+};
+
 const clampNumber = (value, min, max) => {
     if (Number.isNaN(value)) return min;
     if (value < min) return min;
@@ -23,6 +46,68 @@ const clampNumber = (value, min, max) => {
 };
 
 const thumbnailCache = new Map();
+
+const toBox = (detection) => {
+    const bbox = detection?.bbox || {};
+    const width = bbox.width ?? bbox.w ?? null;
+    const height = bbox.height ?? bbox.h ?? null;
+    const centerX = bbox.centerX ?? bbox.x ?? null;
+    const centerY = bbox.centerY ?? bbox.y ?? null;
+    if (width == null || height == null || centerX == null || centerY == null) return null;
+    return {
+        x1: centerX - width / 2,
+        y1: centerY - height / 2,
+        x2: centerX + width / 2,
+        y2: centerY + height / 2
+    };
+};
+
+const iou = (a, b) => {
+    const x1 = Math.max(a.x1, b.x1);
+    const y1 = Math.max(a.y1, b.y1);
+    const x2 = Math.min(a.x2, b.x2);
+    const y2 = Math.min(a.y2, b.y2);
+    const interWidth = Math.max(0, x2 - x1);
+    const interHeight = Math.max(0, y2 - y1);
+    const interArea = interWidth * interHeight;
+    if (interArea === 0) return 0;
+    const areaA = Math.max(0, a.x2 - a.x1) * Math.max(0, a.y2 - a.y1);
+    const areaB = Math.max(0, b.x2 - b.x1) * Math.max(0, b.y2 - b.y1);
+    const union = areaA + areaB - interArea;
+    return union > 0 ? interArea / union : 0;
+};
+
+const applyNms = (detections, threshold = 0.5) => {
+    const scored = detections
+        .map((det) => ({
+            det,
+            box: toBox(det),
+            score:
+                typeof det.confidence === 'number'
+                    ? det.confidence
+                    : typeof det.confidence_percent === 'number'
+                    ? det.confidence_percent / 100
+                    : 0
+        }))
+        .filter((item) => item.box);
+
+    scored.sort((a, b) => b.score - a.score);
+
+    const keep = [];
+    while (scored.length) {
+        const current = scored.shift();
+        keep.push(current.det);
+        for (let i = scored.length - 1; i >= 0; i -= 1) {
+            if (iou(current.box, scored[i].box) > threshold) {
+                scored.splice(i, 1);
+            }
+        }
+    }
+
+    // Include any detections without valid boxes unchanged (they can't be NMS'd)
+    const noBox = detections.filter((det) => !toBox(det));
+    return [...keep, ...noBox];
+};
 
 const createCroppedThumbnail = (dataURL, bbox) =>
     new Promise((resolve, reject) => {
@@ -166,7 +251,8 @@ const runAnalysis = async () => {
             formData.append('confidence', '1');
             formData.append('image', file, photo.name);
 
-            const response = await fetch('/api/analyze', {
+            // Use overlap=60 to have Roboflow suppress duplicate detections server-side
+            const response = await fetch('/api/analyze?overlap=60', {
                 method: 'POST',
                 body: formData
             });
@@ -213,8 +299,10 @@ const runAnalysis = async () => {
             });
         }
 
+        const deduped = applyNms(aggregated, 0.5);
+
         recordDetections({
-            detections: aggregated,
+            detections: deduped,
             threshold: 0.5
         });
 
@@ -339,8 +427,9 @@ const renderOverlay = (state, photo) => {
         // Scale coordinates from API dimensions to displayed dimensions
         const scaledCenterX = centerX * scaleX;
         const scaledCenterY = centerY * scaleY;
-        const scaledWidth = bbox.width * scaleX;
-        const scaledHeight = bbox.height * scaleY;
+        const expandFactor = 1.25; // enlarge boxes to fully cover defects
+        const scaledWidth = bbox.width * scaleX * expandFactor;
+        const scaledHeight = bbox.height * scaleY * expandFactor;
 
         // Convert center-based coordinates to top-left coordinates
         // Add image offset to account for image position within the container
@@ -350,11 +439,18 @@ const renderOverlay = (state, photo) => {
         const box = document.createElement('div');
         box.className = 'overlay-box';
         const isHighlighted = activeHighlight === detection.id;
+        const classColor = getColorForClass(detection.class);
+        
         if (isHighlighted) {
             box.classList.add('highlight');
             box.style.borderWidth = '4px';
+            box.style.borderColor = '#ffd54f';
+            box.style.backgroundColor = 'rgba(255, 213, 79, 0.3)';
+            box.style.boxShadow = '0 0 0 2px rgba(255, 213, 79, 0.4)';
         } else {
             box.style.borderWidth = '3px';
+            box.style.borderColor = classColor.border;
+            box.style.backgroundColor = classColor.bg;
         }
         box.style.left = `${left}px`;
         box.style.top = `${top}px`;
@@ -364,6 +460,7 @@ const renderOverlay = (state, photo) => {
 
         const label = document.createElement('div');
         label.className = 'label';
+        label.style.backgroundColor = isHighlighted ? '#ffd54f' : classColor.label;
         const confidence = typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : '—';
         label.textContent = `${detection.class} · ${confidence}`;
 

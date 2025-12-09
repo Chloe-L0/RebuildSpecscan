@@ -2,6 +2,7 @@ import { setInspectionDetails, readState } from './state.js';
 
 const form = document.getElementById('startForm');
 const tailNumberInput = document.getElementById('tailNumber');
+const departmentInput = document.getElementById('department');
 const inspectorNameInput = document.getElementById('inspectorName');
 const startedAtInput = document.getElementById('startedAt');
 const startButton = document.getElementById('startCaptureBtn');
@@ -24,6 +25,9 @@ const hydrateForm = () => {
     if (state.inspection.tailNumber) {
         tailNumberInput.value = state.inspection.tailNumber;
     }
+    if (state.inspection.department) {
+        departmentInput.value = state.inspection.department;
+    }
     if (state.inspection.inspectorName) {
         inspectorNameInput.value = state.inspection.inspectorName;
     }
@@ -44,6 +48,7 @@ const handleStart = () => {
         tailNumber: formData.get('tailNumber')?.toString() || '',
         inspectionType: formData.get('inspectionType')?.toString() || 'Inbound',
         inspectorName: formData.get('inspectorName')?.toString() || '',
+        department: formData.get('department')?.toString() || '',
         startedAt: new Date().toISOString()
     };
 

@@ -35,6 +35,7 @@ const DEFAULT_STATE = {
         tailNumber: '',
         inspectionType: 'Inbound',
         inspectorName: '',
+        department: '',
         startedAt: null
     },
     photos: [],
@@ -108,11 +109,12 @@ export const updateState = (mutator) => {
     return readState();
 };
 
-export const setInspectionDetails = ({ tailNumber, inspectionType, inspectorName, startedAt }) =>
+export const setInspectionDetails = ({ tailNumber, inspectionType, inspectorName, department, startedAt }) =>
     updateState((draft) => {
         draft.inspection.tailNumber = tailNumber.trim();
         draft.inspection.inspectionType = inspectionType;
         draft.inspection.inspectorName = inspectorName.trim();
+        draft.inspection.department = (department || '').trim();
         draft.inspection.startedAt = startedAt;
         draft.photos = [];
         draft.nextPhotoId = 1;

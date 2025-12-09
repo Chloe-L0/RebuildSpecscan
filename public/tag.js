@@ -137,6 +137,8 @@ const renderPhotos = () => {
 const assignAreaToSelection = (area) => {
     if (!selected.size) return;
     setPhotoArea(Array.from(selected), area);
+    // Clear selection after tagging to make it easy to select a new group
+    selected.clear();
     renderPhotos();
 };
 

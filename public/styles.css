@@ -647,13 +647,13 @@ textarea:focus {
 
 .overlay-box .label {
     position: absolute;
-    top: -28px;
+    top: -22px;
     left: 0;
-    padding: 6px 12px;
+    padding: 4px 8px;
     border-radius: 4px;
     background: var(--danger);
     color: #fff;
-    font-size: 12px;
+    font-size: 10px;
     letter-spacing: 0.08em;
 }
 
