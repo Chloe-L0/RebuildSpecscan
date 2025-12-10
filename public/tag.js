@@ -1,4 +1,4 @@
-import { clearPhotoAreas, readState, setPhotoArea } from './state.js';
+import { clearPhotoAreas, getAreaColor, readState, setPhotoArea } from './state.js';
 
 const tagGrid = document.getElementById('tagGrid');
 const emptyState = document.getElementById('emptyTagState');
@@ -52,6 +52,49 @@ const setActiveHotspots = (area) => {
         const isActive = button.dataset.area === area;
         button.classList.toggle('active', isActive);
         button.setAttribute('aria-pressed', String(isActive));
+        
+        // Apply area-specific colors
+        const buttonArea = button.dataset.area;
+        if (buttonArea) {
+            const colors = getAreaColor(buttonArea);
+            if (isActive) {
+                button.style.backgroundColor = colors.primary;
+                button.style.borderColor = colors.primary;
+                button.style.color = '#ffffff';
+                button.style.boxShadow = `0 8px 20px ${colors.primary}40`;
+            } else {
+                button.style.backgroundColor = colors.light;
+                button.style.borderColor = colors.border;
+                button.style.color = colors.text;
+                button.style.boxShadow = '0 2px 8px rgba(16, 18, 26, 0.08)';
+            }
+        }
+    });
+};
+
+// Add hover effect handlers for area hotspots
+const setupHotspotHovers = () => {
+    hotspotButtons.forEach((button) => {
+        const buttonArea = button.dataset.area;
+        if (buttonArea) {
+            const colors = getAreaColor(buttonArea);
+            
+            button.addEventListener('mouseenter', () => {
+                if (!button.classList.contains('active')) {
+                    button.style.backgroundColor = `${colors.primary}15`;
+                    button.style.borderColor = `${colors.primary}60`;
+                    button.style.color = colors.primary;
+                }
+            });
+            
+            button.addEventListener('mouseleave', () => {
+                if (!button.classList.contains('active')) {
+                    button.style.backgroundColor = colors.light;
+                    button.style.borderColor = colors.border;
+                    button.style.color = colors.text;
+                }
+            });
+        }
     });
 };
 
@@ -79,6 +122,10 @@ const createPhotoCard = (photo) => {
     }
     if (photo.area) {
         card.classList.add('tagged');
+        // Apply area-specific color
+        const colors = getAreaColor(photo.area);
+        card.style.backgroundColor = colors.light;
+        card.style.borderColor = colors.border;
     }
 
     const checkbox = document.createElement('input');
@@ -98,6 +145,11 @@ const createPhotoCard = (photo) => {
     const areaBadge = document.createElement('span');
     areaBadge.className = 'area-badge';
     areaBadge.textContent = photo.area ? `Tagged: ${photo.area}` : 'Area not assigned';
+    if (photo.area) {
+        const colors = getAreaColor(photo.area);
+        areaBadge.style.color = colors.text;
+        areaBadge.style.fontWeight = '600';
+    }
 
     const footer = document.createElement('footer');
     footer.innerHTML = `<span class="muted">${photo.name}</span><span>Photo #${photo.number}</span>`;
@@ -200,10 +252,27 @@ nextBtn?.addEventListener('click', () => {
     window.location.href = 'results.html';
 });
 
+// Initialize hotspot colors on page load
+const initializeHotspotColors = () => {
+    hotspotButtons.forEach((button) => {
+        const buttonArea = button.dataset.area;
+        if (buttonArea) {
+            const colors = getAreaColor(buttonArea);
+            button.style.backgroundColor = colors.light;
+            button.style.borderColor = colors.border;
+            button.style.color = colors.text;
+        }
+    });
+    setupHotspotHovers();
+};
+
 const initialState = ensurePhotos();
 if (initialState) {
     renderPhotos();
 }
+
+// Initialize hotspot colors
+initializeHotspotColors();
 
 const storedArea = sessionStorage.getItem(SELECTED_AREA_KEY);
 if (storedArea) {

@@ -1,5 +1,6 @@
 import {
     addPhotosToState,
+    getAreaColor,
     readState,
     removePhotoFromState,
     resetState
@@ -81,6 +82,13 @@ const renderPhotos = () => {
         areaChip.className = 'chip';
         areaChip.dataset.state = photo.area ? 'assigned' : 'pending';
         areaChip.textContent = photo.area ? photo.area : 'Area unassigned';
+        // Apply area-specific color to chip
+        if (photo.area) {
+            const colors = getAreaColor(photo.area);
+            areaChip.style.backgroundColor = colors.light;
+            areaChip.style.borderColor = colors.border;
+            areaChip.style.color = colors.text;
+        }
         const size = document.createElement('span');
         size.className = 'muted';
         size.textContent = 'Tap to tag next step';

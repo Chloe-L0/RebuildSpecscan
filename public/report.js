@@ -211,6 +211,69 @@ const createAnnotatedImage = async (photo, detections, highlightId) => {
     return canvas.toDataURL('image/png');
 };
 
+// Create thumbnail from detection bbox
+const createThumbnail = async (photo, detection, size = 200) => {
+    const image = await loadImage(photo.dataURL);
+    const imageWidth = image.naturalWidth || image.width;
+    const imageHeight = image.naturalHeight || image.height;
+    const bbox = detection.bbox || {};
+    
+    const centerX = bbox.centerX ?? bbox.x ?? null;
+    const centerY = bbox.centerY ?? bbox.y ?? null;
+    const boxWidth = bbox.width ?? bbox.w ?? null;
+    const boxHeight = bbox.height ?? bbox.h ?? null;
+    const sourceWidth = bbox.imageWidth || imageWidth;
+    const sourceHeight = bbox.imageHeight || imageHeight;
+    
+    if (!centerX || !centerY || !boxWidth || !boxHeight) {
+        // Fallback: use full image scaled down
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(image, 0, 0, size, size);
+            return canvas.toDataURL('image/png');
+        }
+        return photo.dataURL;
+    }
+    
+    // Calculate crop area with padding
+    const scaleX = imageWidth / sourceWidth;
+    const scaleY = imageHeight / sourceHeight;
+    const cropWidth = Math.max(boxWidth * scaleX * 1.5, imageWidth * 0.1);
+    const cropHeight = Math.max(boxHeight * scaleY * 1.5, imageHeight * 0.1);
+    const cropLeft = Math.max(0, Math.min(imageWidth - cropWidth, centerX * scaleX - cropWidth / 2));
+    const cropTop = Math.max(0, Math.min(imageHeight - cropHeight, centerY * scaleY - cropHeight / 2));
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return photo.dataURL;
+    
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(
+        image,
+        cropLeft, cropTop, cropWidth, cropHeight,
+        0, 0, size, size
+    );
+    
+    // Draw bounding box on thumbnail
+    const thumbScaleX = size / cropWidth;
+    const thumbScaleY = size / cropHeight;
+    const thumbLeft = (centerX * scaleX - cropLeft) * thumbScaleX - (boxWidth * scaleX * thumbScaleX) / 2;
+    const thumbTop = (centerY * scaleY - cropTop) * thumbScaleY - (boxHeight * scaleY * thumbScaleY) / 2;
+    const thumbWidth = boxWidth * scaleX * thumbScaleX;
+    const thumbHeight = boxHeight * scaleY * thumbScaleY;
+    
+    ctx.strokeStyle = '#ff0000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(thumbLeft, thumbTop, thumbWidth, thumbHeight);
+    
+    return canvas.toDataURL('image/png');
+};
+
 const addLine = (page, text, fonts, cursor, options = {}) => {
     const { font = fonts.regular, size = 12, color = rgb(0.1, 0.1, 0.1), lineHeight = 16 } = options;
     page.drawText(text, { x: cursor.margin, y: cursor.y, size, font, color });
@@ -252,9 +315,13 @@ const generatePdf = async () => {
         cursor.y -= 22;
     };
 
+    // ========================================
+    // PAGE 1: COVER & SUMMARY
+    // ========================================
+    
     // Title
-    addLine(cursor.page, 'AIRCRAFT INSPECTION REPORT', fonts, cursor, { size: 20, font: fonts.bold, lineHeight: 26 });
-    cursor.y -= 6;
+    addLine(cursor.page, 'AIRCRAFT INSPECTION REPORT', fonts, cursor, { size: 24, font: fonts.bold, lineHeight: 30 });
+    cursor.y -= 10;
 
     addSectionTitle('AIRCRAFT INFORMATION');
     addKeyValue(cursor.page, 'Registration', state.inspection.tailNumber || 'Not provided', fonts, cursor);
@@ -283,91 +350,263 @@ const generatePdf = async () => {
 
     cursor.y -= 12;
     addSectionTitle('FINDINGS SUMMARY');
-    addKeyValue(cursor.page, 'Total Defects Detected', includedDetections.length.toString(), fonts, cursor);
-
-    cursor.y -= 12;
-    addSectionTitle('DETAILED FINDINGS');
-
-    if (!includedDetections.length) {
+    
+    // Summary table
+    if (includedDetections.length > 0) {
+        ensureSpace(pdfDoc, cursor, 40);
+        
+        // Table header
+        const tableY = cursor.y;
+        const col1 = cursor.margin;
+        const col2 = col1 + 80;
+        const col3 = col2 + 120;
+        const col4 = col3 + 100;
+        const col5 = col4 + 100;
+        
+        cursor.page.drawText('ID', { x: col1, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        cursor.page.drawText('Defect Type', { x: col2, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        cursor.page.drawText('Location', { x: col3, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        cursor.page.drawText('Photo #', { x: col4, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        cursor.page.drawText('Confidence', { x: col5, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        
+        cursor.y -= 16;
+        
+        // Table rows
+        let findingIndex = 1;
+        for (const detection of includedDetections) {
+            ensureSpace(pdfDoc, cursor, 16);
+            const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'N/A');
+            
+            cursor.page.drawText(`F-${String(findingIndex).padStart(3, '0')}`, { x: col1, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText(detection.class || 'Defect', { x: col2, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText(detection.area || 'N/A', { x: col3, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText(`#${detection.photoNumber}`, { x: col4, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText(confidence, { x: col5, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
+            
+            cursor.y -= 14;
+            findingIndex++;
+        }
+    } else {
         addLine(cursor.page, 'No defects met the reporting criteria at the selected threshold.', fonts, cursor, { size: 12 });
     }
 
-    let findingIndex = 1;
-    for (const detection of includedDetections) {
-        ensureSpace(pdfDoc, cursor, 220);
-        const photo = state.photos.find((p) => p.id === detection.photoId);
-        const photoDetections = includedDetections.filter((det) => det.photoId === detection.photoId);
-        const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'Not recorded');
-        const bbox = detection.bbox || {};
-        const dims =
-            bbox.width && bbox.height
+    // ========================================
+    // PAGES 2+: DETAILED FINDINGS (COMPACT)
+    // ========================================
+    
+    if (includedDetections.length > 0) {
+        cursor.y -= 20;
+        ensureSpace(pdfDoc, cursor, 100);
+        addSectionTitle('DETAILED FINDINGS');
+
+        let findingIndex = 1;
+        const THUMBNAIL_SIZE = 200;
+        const THUMBNAIL_MARGIN = 20;
+        const DETAILS_X = cursor.margin + THUMBNAIL_SIZE + THUMBNAIL_MARGIN;
+        const FINDING_HEIGHT = 240; // Space per finding
+        const FINDINGS_PER_PAGE = 2;
+
+        for (const detection of includedDetections) {
+            // Check if we need a new page (allow space for 2 findings per page)
+            const findingsOnPage = (findingIndex - 1) % FINDINGS_PER_PAGE;
+            if (findingsOnPage === 0 && findingIndex > 1) {
+                cursor.page = pdfDoc.addPage([612, 792]);
+                cursor.y = 792 - cursor.margin;
+            }
+            
+            ensureSpace(pdfDoc, cursor, FINDING_HEIGHT);
+            
+            const photo = state.photos.find((p) => p.id === detection.photoId);
+            const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'Not recorded');
+            const bbox = detection.bbox || {};
+            const dims = bbox.width && bbox.height
                 ? `${Math.round(bbox.width)} × ${Math.round(bbox.height)} px`
                 : 'Not recorded';
 
-        const detectionLabel = detection.manual ? 'Manual Detection' : 'AI Detection';
-        addLine(
-            cursor.page,
-            `Finding F-${String(findingIndex).padStart(3, '0')}: ${detection.class || 'Defect'} in ${detection.area || 'Unknown component'} [${detectionLabel}]`,
-            fonts,
-            cursor,
-            { size: 14, font: fonts.bold, lineHeight: 20 }
-        );
-        addKeyValue(cursor.page, 'Location', `${detection.area || 'Area N/A'} · Photo #${detection.photoNumber}`, fonts, cursor);
-        addKeyValue(cursor.page, 'Defect Type', detection.class || 'Defect', fonts, cursor);
-        addKeyValue(cursor.page, 'Dimensions', dims, fonts, cursor);
-        if (detection.manual) {
-            addKeyValue(cursor.page, 'Detection Type', 'Manual Detection', fonts, cursor);
-        } else {
-            addKeyValue(cursor.page, 'AI Confidence', confidence, fonts, cursor);
-        }
-        const description = detection.manual
-            ? `Manual annotation on ${detection.area || 'area'} (Photo #${detection.photoNumber}).`
-            : `Automated detection on ${detection.area || 'area'} (Photo #${detection.photoNumber}).`;
-        addKeyValue(
-            cursor.page,
-            'Description',
-            description,
-            fonts,
-            cursor
-        );
-        addKeyValue(cursor.page, 'Required Action', 'Maintenance technician to verify and remediate as needed.', fonts, cursor);
-        addKeyValue(cursor.page, 'Estimated Repair Time', detection.estimatedTime || 'Not estimated', fonts, cursor);
+            const detectionLabel = detection.manual ? 'Manual Detection' : 'AI Detection';
+            const findingTitle = `Finding F-${String(findingIndex).padStart(3, '0')}: ${detection.class || 'Defect'}`;
+            
+            const findingStartY = cursor.y;
+            
+            // Title
+            cursor.page.drawText(findingTitle, {
+                x: DETAILS_X,
+                y: cursor.y,
+                size: 12,
+                font: fonts.bold,
+                color: rgb(0.1, 0.1, 0.1)
+            });
+            cursor.y -= 16;
+            
+            // Subtitle
+            cursor.page.drawText(`${detection.area || 'Unknown component'} · ${detectionLabel}`, {
+                x: DETAILS_X,
+                y: cursor.y,
+                size: 10,
+                font: fonts.regular,
+                color: rgb(0.4, 0.4, 0.4)
+            });
+            cursor.y -= 20;
 
-        if (photo?.dataURL) {
+            // Details on right side
+            let detailY = cursor.y;
+            
+            cursor.page.drawText('Location:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText(`${detection.area || 'Area N/A'} · Photo #${detection.photoNumber}`, {
+                x: DETAILS_X + 50,
+                y: detailY,
+                size: 9,
+                font: fonts.regular,
+                color: rgb(0.1, 0.1, 0.1)
+            });
+            detailY -= 14;
+
+            cursor.page.drawText('Type:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText(detection.class || 'Defect', {
+                x: DETAILS_X + 50,
+                y: detailY,
+                size: 9,
+                font: fonts.regular,
+                color: rgb(0.1, 0.1, 0.1)
+            });
+            detailY -= 14;
+
+            cursor.page.drawText('Dimensions:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText(dims, {
+                x: DETAILS_X + 50,
+                y: detailY,
+                size: 9,
+                font: fonts.regular,
+                color: rgb(0.1, 0.1, 0.1)
+            });
+            detailY -= 14;
+
+            if (detection.manual) {
+                cursor.page.drawText('Detection:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+                cursor.page.drawText('Manual', {
+                    x: DETAILS_X + 50,
+                    y: detailY,
+                    size: 9,
+                    font: fonts.regular,
+                    color: rgb(0.1, 0.1, 0.1)
+                });
+            } else {
+                cursor.page.drawText('Confidence:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+                cursor.page.drawText(confidence, {
+                    x: DETAILS_X + 50,
+                    y: detailY,
+                    size: 9,
+                    font: fonts.regular,
+                    color: rgb(0.1, 0.1, 0.1)
+                });
+            }
+            detailY -= 14;
+
+            cursor.page.drawText('Action:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+            cursor.page.drawText('Verify and remediate', {
+                x: DETAILS_X + 50,
+                y: detailY,
+                size: 9,
+                font: fonts.regular,
+                color: rgb(0.1, 0.1, 0.1)
+            });
+
+            // Thumbnail on left side
+            if (photo?.dataURL) {
+                try {
+                    const thumbnail = await createThumbnail(photo, detection, THUMBNAIL_SIZE);
+                    const thumbImage = await pdfDoc.embedPng(thumbnail);
+                    const thumbY = findingStartY - THUMBNAIL_SIZE;
+                    
+                    cursor.page.drawImage(thumbImage, {
+                        x: cursor.margin,
+                        y: thumbY,
+                        width: THUMBNAIL_SIZE,
+                        height: THUMBNAIL_SIZE
+                    });
+                } catch (error) {
+                    console.error('Failed to embed thumbnail', error);
+                }
+            }
+
+            // Move cursor down for next finding
+            cursor.y = findingStartY - FINDING_HEIGHT;
+            findingIndex += 1;
+        }
+    }
+
+    // ========================================
+    // LAST PAGE: FULL RESOLUTION IMAGES (OPTIONAL)
+    // ========================================
+    
+    if (state.report.includeThumbnails && includedDetections.length > 0) {
+        cursor.y -= 30;
+        ensureSpace(pdfDoc, cursor, 100);
+        addSectionTitle('FULL RESOLUTION IMAGES');
+        
+        // Group detections by photo to avoid duplicates
+        const photoMap = new Map();
+        includedDetections.forEach((detection) => {
+            const photo = state.photos.find((p) => p.id === detection.photoId);
+            if (photo && !photoMap.has(photo.id)) {
+                photoMap.set(photo.id, { photo, detections: [] });
+            }
+            if (photo) {
+                photoMap.get(photo.id).detections.push(detection);
+            }
+        });
+
+        const imagesPerPage = 2;
+        const imageWidth = (612 - cursor.margin * 3) / 2; // 2 images with margins
+        let imagesOnPage = 0;
+        let currentX = cursor.margin;
+        let currentY = cursor.y;
+
+        for (const [photoId, { photo, detections }] of photoMap) {
+            if (imagesOnPage >= imagesPerPage) {
+                cursor.page = pdfDoc.addPage([612, 792]);
+                cursor.y = 792 - cursor.margin;
+                currentY = cursor.y;
+                currentX = cursor.margin;
+                imagesOnPage = 0;
+            }
+
             try {
-                const annotated = await createAnnotatedImage(photo, photoDetections, detection.id);
+                const annotated = await createAnnotatedImage(photo, detections, null);
                 const pngImage = await pdfDoc.embedPng(annotated);
-                const maxWidth = 612 - cursor.margin * 2;
-                const scale = Math.min(1, maxWidth / pngImage.width);
-                const displayWidth = pngImage.width * scale;
+                const scale = imageWidth / pngImage.width;
                 const displayHeight = pngImage.height * scale;
 
-                ensureSpace(pdfDoc, cursor, displayHeight + 24);
-                cursor.page.drawText('Photographic Evidence', {
-                    x: cursor.margin,
-                    y: cursor.y,
-                    size: 12,
+                // Label
+                cursor.page.drawText(`Photo #${photo.number} - ${photo.area || 'Unknown'}`, {
+                    x: currentX,
+                    y: currentY,
+                    size: 10,
                     font: fonts.bold,
                     color: rgb(0.1, 0.1, 0.1)
                 });
-                cursor.y -= 16;
+                currentY -= 16;
+
+                // Image
                 cursor.page.drawImage(pngImage, {
-                    x: cursor.margin,
-                    y: cursor.y - displayHeight,
-                    width: displayWidth,
+                    x: currentX,
+                    y: currentY - displayHeight,
+                    width: imageWidth,
                     height: displayHeight
                 });
-                cursor.y -= displayHeight + 18;
-            } catch (error) {
-                console.error('Failed to embed photo', error);
-                addLine(cursor.page, 'Photographic evidence unavailable for this finding.', fonts, cursor);
-            }
-        } else {
-            addLine(cursor.page, 'Photographic evidence unavailable for this finding.', fonts, cursor);
-        }
 
-        findingIndex += 1;
-        cursor.y -= 4;
+                currentX += imageWidth + cursor.margin;
+                if (currentX + imageWidth > 612 - cursor.margin) {
+                    currentX = cursor.margin;
+                    currentY -= displayHeight + 40;
+                    imagesOnPage++;
+                } else {
+                    imagesOnPage++;
+                }
+            } catch (error) {
+                console.error('Failed to embed full resolution image', error);
+            }
+        }
     }
 
     const pdfBytes = await pdfDoc.save();

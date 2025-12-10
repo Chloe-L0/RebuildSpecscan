@@ -352,6 +352,31 @@ if (process.env.NODE_ENV !== 'test') {
 ${ROBOFLOW_API_KEY === 'YOUR_KEY_HERE' || ROBOFLOW_MODEL_ID === 'YOUR_MODEL_ID_HERE' ? '⚠️  Create .env file in backend/ folder with your Roboflow credentials!' : ''}
         `);
     });
+
+    // Handle port already in use error gracefully
+    server.on('error', (error) => {
+        if (error.code === 'EADDRINUSE') {
+            console.error(`
+╔═══════════════════════════════════════╗
+║           PORT ALREADY IN USE         ║
+╚═══════════════════════════════════════╝
+
+Port ${PORT} is already in use.
+
+To fix this:
+1. Find and kill the process using port ${PORT}:
+   netstat -ano | findstr :${PORT}
+   taskkill /PID <PID> /F
+
+2. Or change the PORT in backend/.env file
+
+Current error: ${error.message}
+            `);
+            process.exit(1);
+        } else {
+            throw error;
+        }
+    });
 }
 
 module.exports = app;

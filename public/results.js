@@ -2,6 +2,7 @@ import {
     AREAS,
     addManualDetection,
     dataURLToFile,
+    getAreaColor,
     readState,
     recordDetections,
     removeDetection,
@@ -556,6 +557,20 @@ const renderTabs = (state) => {
         tab.type = 'button';
         tab.className = `tab${area === activeArea ? ' active' : ''}`;
         tab.innerHTML = `<span>${area}</span><span class="tab-count">${counts[area] || 0}</span>`;
+        
+        // Apply area-specific colors
+        const colors = getAreaColor(area);
+        if (area === activeArea) {
+            tab.style.backgroundColor = colors.primary;
+            tab.style.borderColor = colors.primary;
+            tab.style.color = '#ffffff';
+            tab.style.boxShadow = `0 10px 22px ${colors.primary}40`;
+        } else {
+            tab.style.backgroundColor = colors.light;
+            tab.style.borderColor = colors.border;
+            tab.style.color = colors.text;
+        }
+        
         tab.addEventListener('click', () => {
             setCurrentAreaView(area);
             setCurrentPhotoIndex(0);

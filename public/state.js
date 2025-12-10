@@ -9,6 +9,55 @@ export const AREAS = [
     'Engines'
 ];
 
+// Color scheme for each inspection area
+export const AREA_COLORS = {
+    'Fuselage': {
+        primary: '#2563eb',      // Blue
+        light: 'rgba(37, 99, 235, 0.12)',
+        border: 'rgba(37, 99, 235, 0.3)',
+        text: '#1e40af'
+    },
+    'Left Wing': {
+        primary: '#059669',      // Green
+        light: 'rgba(5, 150, 105, 0.12)',
+        border: 'rgba(5, 150, 105, 0.3)',
+        text: '#047857'
+    },
+    'Right Wing': {
+        primary: '#7c3aed',       // Purple
+        light: 'rgba(124, 58, 237, 0.12)',
+        border: 'rgba(124, 58, 237, 0.3)',
+        text: '#6d28d9'
+    },
+    'Tail': {
+        primary: '#dc2626',       // Red
+        light: 'rgba(220, 38, 38, 0.12)',
+        border: 'rgba(220, 38, 38, 0.3)',
+        text: '#b91c1c'
+    },
+    'Landing Gear': {
+        primary: '#d97706',       // Orange
+        light: 'rgba(217, 119, 6, 0.12)',
+        border: 'rgba(217, 119, 6, 0.3)',
+        text: '#b45309'
+    },
+    'Engines': {
+        primary: '#0284c7',       // Cyan
+        light: 'rgba(2, 132, 199, 0.12)',
+        border: 'rgba(2, 132, 199, 0.3)',
+        text: '#0369a1'
+    }
+};
+
+export const getAreaColor = (area) => {
+    return AREA_COLORS[area] || {
+        primary: '#62667a',
+        light: 'rgba(98, 102, 122, 0.12)',
+        border: 'rgba(98, 102, 122, 0.3)',
+        text: '#4b5563'
+    };
+};
+
 const AREA_SLUG_LOOKUP = {
     Fuselage: 'fuselage',
     'Left Wing': 'left-wing',
