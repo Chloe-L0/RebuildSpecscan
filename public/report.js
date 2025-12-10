@@ -297,16 +297,17 @@ const generatePdf = async () => {
         ensureSpace(pdfDoc, cursor, 220);
         const photo = state.photos.find((p) => p.id === detection.photoId);
         const photoDetections = includedDetections.filter((det) => det.photoId === detection.photoId);
-        const confidence = typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'Not recorded';
+        const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'Not recorded');
         const bbox = detection.bbox || {};
         const dims =
             bbox.width && bbox.height
                 ? `${Math.round(bbox.width)} × ${Math.round(bbox.height)} px`
                 : 'Not recorded';
 
+        const detectionLabel = detection.manual ? 'Manual Detection' : 'AI Detection';
         addLine(
             cursor.page,
-            `Finding F-${String(findingIndex).padStart(3, '0')}: ${detection.class || 'Defect'} in ${detection.area || 'Unknown component'}`,
+            `Finding F-${String(findingIndex).padStart(3, '0')}: ${detection.class || 'Defect'} in ${detection.area || 'Unknown component'} [${detectionLabel}]`,
             fonts,
             cursor,
             { size: 14, font: fonts.bold, lineHeight: 20 }
@@ -314,11 +315,18 @@ const generatePdf = async () => {
         addKeyValue(cursor.page, 'Location', `${detection.area || 'Area N/A'} · Photo #${detection.photoNumber}`, fonts, cursor);
         addKeyValue(cursor.page, 'Defect Type', detection.class || 'Defect', fonts, cursor);
         addKeyValue(cursor.page, 'Dimensions', dims, fonts, cursor);
-        addKeyValue(cursor.page, 'AI Confidence', confidence, fonts, cursor);
+        if (detection.manual) {
+            addKeyValue(cursor.page, 'Detection Type', 'Manual Detection', fonts, cursor);
+        } else {
+            addKeyValue(cursor.page, 'AI Confidence', confidence, fonts, cursor);
+        }
+        const description = detection.manual
+            ? `Manual annotation on ${detection.area || 'area'} (Photo #${detection.photoNumber}).`
+            : `Automated detection on ${detection.area || 'area'} (Photo #${detection.photoNumber}).`;
         addKeyValue(
             cursor.page,
             'Description',
-            `Automated detection on ${detection.area || 'area'} (Photo #${detection.photoNumber}).`,
+            description,
             fonts,
             cursor
         );

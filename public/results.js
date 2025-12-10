@@ -1,8 +1,10 @@
 import {
     AREAS,
+    addManualDetection,
     dataURLToFile,
     readState,
     recordDetections,
+    removeDetection,
     resetState,
     setAnalysisStatus,
     setAnalysisThreshold,
@@ -184,6 +186,224 @@ const saveDraftBtn = document.getElementById('saveDraftBtn');
 
 let activeHighlight = null;
 
+// Drawing state for manual annotations
+let isDrawing = false;
+let drawStartX = 0;
+let drawStartY = 0;
+let previewBox = null;
+
+const getViewerStage = () => document.querySelector('.viewer-stage');
+
+// Convert screen coordinates to image coordinates
+const screenToImageCoords = (screenX, screenY) => {
+    if (!resultImage.complete || !resultImage.naturalWidth || !resultImage.naturalHeight) {
+        return null;
+    }
+
+    const viewerStage = getViewerStage();
+    if (!viewerStage) return null;
+    
+    const container = viewerStage;
+    const containerRect = container.getBoundingClientRect();
+    const imageRect = resultImage.getBoundingClientRect();
+    
+    // Get relative position within container
+    const relX = screenX - containerRect.left;
+    const relY = screenY - containerRect.top;
+    
+    // Get image offset within container
+    const imageOffsetX = imageRect.left - containerRect.left;
+    const imageOffsetY = imageRect.top - containerRect.top;
+    
+    // Get displayed and natural image dimensions
+    const displayedWidth = imageRect.width;
+    const displayedHeight = imageRect.height;
+    const naturalWidth = resultImage.naturalWidth;
+    const naturalHeight = resultImage.naturalHeight;
+    
+    // Check if click is within image bounds
+    if (relX < imageOffsetX || relX > imageOffsetX + displayedWidth ||
+        relY < imageOffsetY || relY > imageOffsetY + displayedHeight) {
+        return null;
+    }
+    
+    // Convert to image coordinates
+    const scaleX = naturalWidth / displayedWidth;
+    const scaleY = naturalHeight / displayedHeight;
+    
+    const imageX = (relX - imageOffsetX) * scaleX;
+    const imageY = (relY - imageOffsetY) * scaleY;
+    
+    return { x: imageX, y: imageY };
+};
+
+// Create preview box for drawing
+const createPreviewBox = (x1, y1, x2, y2) => {
+    if (previewBox) {
+        previewBox.remove();
+    }
+    
+    const left = Math.min(x1, x2);
+    const top = Math.min(y1, y2);
+    const width = Math.abs(x2 - x1);
+    const height = Math.abs(y2 - y1);
+    
+    previewBox = document.createElement('div');
+    previewBox.className = 'overlay-box';
+    previewBox.style.position = 'absolute';
+    previewBox.style.border = '2px dashed #4a90e2';
+    previewBox.style.backgroundColor = 'rgba(74, 144, 226, 0.1)';
+    previewBox.style.pointerEvents = 'none';
+    previewBox.style.left = `${left}px`;
+    previewBox.style.top = `${top}px`;
+    previewBox.style.width = `${width}px`;
+    previewBox.style.height = `${height}px`;
+    previewBox.style.zIndex = '10';
+    
+    overlayLayer.appendChild(previewBox);
+};
+
+// Remove preview box
+const removePreviewBox = () => {
+    if (previewBox) {
+        previewBox.remove();
+        previewBox = null;
+    }
+};
+
+// Handle mouse down - start drawing
+const handleMouseDown = (event) => {
+    // Don't start drawing if clicking on a detection box or button
+    if (event.target.closest('.overlay-box') || event.target.closest('button')) {
+        return;
+    }
+    
+    const viewerStage = getViewerStage();
+    if (!viewerStage || !resultImage.complete) return;
+    
+    const container = viewerStage;
+    const containerRect = container.getBoundingClientRect();
+    const imageRect = resultImage.getBoundingClientRect();
+    
+    // Check if click is within image bounds
+    const relX = event.clientX - containerRect.left;
+    const relY = event.clientY - containerRect.top;
+    const imageOffsetX = imageRect.left - containerRect.left;
+    const imageOffsetY = imageRect.top - containerRect.top;
+    
+    if (relX < imageOffsetX || relX > imageOffsetX + imageRect.width ||
+        relY < imageOffsetY || relY > imageOffsetY + imageRect.height) {
+        return;
+    }
+    
+    isDrawing = true;
+    drawStartX = event.clientX;
+    drawStartY = event.clientY;
+    
+    event.preventDefault();
+    event.stopPropagation();
+};
+
+// Handle mouse move - update preview
+const handleMouseMove = (event) => {
+    if (!isDrawing) return;
+    const viewerStage = getViewerStage();
+    if (!viewerStage) return;
+    
+    const container = viewerStage;
+    const containerRect = container.getBoundingClientRect();
+    const imageRect = resultImage.getBoundingClientRect();
+    
+    const imageOffsetX = imageRect.left - containerRect.left;
+    const imageOffsetY = imageRect.top - containerRect.top;
+    
+    const currentX = event.clientX;
+    const currentY = event.clientY;
+    
+    // Convert to container-relative coordinates
+    const startRelX = drawStartX - containerRect.left;
+    const startRelY = drawStartY - containerRect.top;
+    const currentRelX = currentX - containerRect.left;
+    const currentRelY = currentY - containerRect.top;
+    
+    createPreviewBox(startRelX, startRelY, currentRelX, currentRelY);
+    event.preventDefault();
+};
+
+// Handle mouse up - finalize box
+const handleMouseUp = async (event) => {
+    if (!isDrawing) return;
+    
+    const wasDrawing = isDrawing;
+    isDrawing = false;
+    removePreviewBox();
+    
+    if (!wasDrawing) return;
+    
+    const state = readState();
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    if (!areaPhotos.length) return;
+    
+    const index = state.analysis.currentPhotoIndex ?? 0;
+    const currentPhoto = areaPhotos[index];
+    if (!currentPhoto) return;
+    
+    // Convert coordinates
+    const startCoords = screenToImageCoords(drawStartX, drawStartY);
+    const endCoords = screenToImageCoords(event.clientX, event.clientY);
+    
+    if (!startCoords || !endCoords) {
+        console.log('Failed to convert coordinates', { startCoords, endCoords });
+        return;
+    }
+    
+    // Calculate bounding box
+    const left = Math.min(startCoords.x, endCoords.x);
+    const top = Math.min(startCoords.y, endCoords.y);
+    const right = Math.max(startCoords.x, endCoords.x);
+    const bottom = Math.max(startCoords.y, endCoords.y);
+    
+    const width = right - left;
+    const height = bottom - top;
+    
+    // Minimum size check
+    if (width < 10 || height < 10) {
+        console.log('Box too small', { width, height });
+        return;
+    }
+    
+    const centerX = left + width / 2;
+    const centerY = top + height / 2;
+    
+    // Prompt for defect type
+    const defectType = prompt('Enter defect type:', 'manual_defect');
+    if (!defectType || defectType.trim() === '') {
+        return;
+    }
+    
+    // Create manual detection
+    const detection = {
+        photoId: currentPhoto.id,
+        photoNumber: currentPhoto.number,
+        area: currentPhoto.area,
+        class: defectType.trim(),
+        bbox: {
+            centerX,
+            centerY,
+            width,
+            height,
+            imageWidth: resultImage.naturalWidth,
+            imageHeight: resultImage.naturalHeight
+        }
+    };
+    
+    addManualDetection(detection);
+    render();
+    event.preventDefault();
+    event.stopPropagation();
+};
+
 // Resize handler for updating bounding boxes when window is resized
 let resizeTimeout;
 const handleWindowResize = () => {
@@ -352,6 +572,8 @@ const filterDetections = (state, area, options = {}) => {
         if (detection.area !== area) return false;
         if (photoId !== undefined && detection.photoId !== photoId) return false;
         if (!includeFalsePositives && detection.falsePositive) return false;
+        // Manual detections are always included (they bypass threshold)
+        if (detection.manual) return true;
         if (typeof detection.confidence === 'number' && detection.confidence < threshold) return false;
         return true;
     });
@@ -361,7 +583,7 @@ const renderOverlay = (state, photo) => {
     overlayLayer.innerHTML = '';
     if (!photo || !resultImage.complete) return;
 
-    const detections = filterDetections(state, photo.area, { photoId: photo.id });
+    const detections = filterDetections(state, photo.area, { photoId: photo.id, includeFalsePositives: true });
     if (!detections.length) return;
 
     // Get the container (viewer-stage) dimensions
@@ -461,7 +683,7 @@ const renderOverlay = (state, photo) => {
         const label = document.createElement('div');
         label.className = 'label';
         label.style.backgroundColor = isHighlighted ? '#ffd54f' : classColor.label;
-        const confidence = typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : '—';
+        const confidence = typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : (detection.confidence === 'Manual' ? 'Manual' : '—');
         label.textContent = `${detection.class} · ${confidence}`;
 
         box.appendChild(label);
@@ -540,9 +762,14 @@ const renderDetectionList = (state, area, photo) => {
         body.className = 'detection-body';
 
         const title = document.createElement('header');
-        const confidenceValue =
-            typeof detection.confidence === 'number' ? Math.round(detection.confidence * 100) : null;
-        const confidenceLabel = confidenceValue != null ? `${confidenceValue}%` : 'Confidence n/a';
+        let confidenceLabel;
+        if (detection.manual) {
+            confidenceLabel = 'Manual';
+        } else {
+            const confidenceValue =
+                typeof detection.confidence === 'number' ? Math.round(detection.confidence * 100) : null;
+            confidenceLabel = confidenceValue != null ? `${confidenceValue}%` : 'Confidence n/a';
+        }
         title.innerHTML = `<span>${detection.class}</span><span>${confidenceLabel}</span>`;
         body.appendChild(title);
 
@@ -555,10 +782,13 @@ const renderDetectionList = (state, area, photo) => {
         const areaSpan = document.createElement('span');
         areaSpan.textContent = detection.area;
 
-        const thresholdSpan = document.createElement('span');
-        thresholdSpan.textContent = `Threshold ≥${threshold}%`;
-
-        meta.append(photoSpan, areaSpan, thresholdSpan);
+        if (!detection.manual) {
+            const thresholdSpan = document.createElement('span');
+            thresholdSpan.textContent = `Threshold ≥${threshold}%`;
+            meta.append(photoSpan, areaSpan, thresholdSpan);
+        } else {
+            meta.append(photoSpan, areaSpan);
+        }
 
         const coordsText = (() => {
             const box = detection.bbox || {};
@@ -588,20 +818,42 @@ const renderDetectionList = (state, area, photo) => {
 
         const actions = document.createElement('div');
         actions.className = 'detection-actions';
-        const toggle = document.createElement('button');
-        toggle.type = 'button';
-        toggle.className = 'ghost toggle-icon';
-        toggle.setAttribute('aria-label', detection.falsePositive ? 'Restore detection' : 'Mark false positive');
-        toggle.textContent = detection.falsePositive ? '↻' : '×';
-        toggle.addEventListener('click', (event) => {
-            event.stopPropagation();
-            if (!detection.falsePositive && activeHighlight === detection.id) {
-                activeHighlight = null;
-            }
-            toggleFalsePositive(detection.id);
-            render();
-        });
-        actions.appendChild(toggle);
+        
+        // For manual detections, show delete button instead of false positive toggle
+        if (detection.manual) {
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'ghost toggle-icon';
+            deleteBtn.setAttribute('aria-label', 'Delete manual detection');
+            deleteBtn.textContent = '×';
+            deleteBtn.style.color = 'var(--danger)';
+            deleteBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                if (activeHighlight === detection.id) {
+                    activeHighlight = null;
+                }
+                if (confirm('Delete this manual detection?')) {
+                    removeDetection(detection.id);
+                    render();
+                }
+            });
+            actions.appendChild(deleteBtn);
+        } else {
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'ghost toggle-icon';
+            toggle.setAttribute('aria-label', detection.falsePositive ? 'Restore detection' : 'Mark false positive');
+            toggle.textContent = detection.falsePositive ? '↻' : '×';
+            toggle.addEventListener('click', (event) => {
+                event.stopPropagation();
+                if (!detection.falsePositive && activeHighlight === detection.id) {
+                    activeHighlight = null;
+                }
+                toggleFalsePositive(detection.id);
+                render();
+            });
+            actions.appendChild(toggle);
+        }
 
         body.appendChild(actions);
         card.appendChild(body);
@@ -686,6 +938,17 @@ const renderViewer = () => {
         window.addEventListener('resize', handleWindowResize);
         window.__resultsResizeHandlerAttached = true;
     }
+    
+    // Drawing handlers should already be attached, but ensure they are
+    if (!window.__resultsDrawingHandlersAttached) {
+        const viewerStage = getViewerStage();
+        if (viewerStage) {
+            viewerStage.addEventListener('mousedown', handleMouseDown);
+            window.addEventListener('mousemove', handleMouseMove);
+            window.addEventListener('mouseup', handleMouseUp);
+            window.__resultsDrawingHandlersAttached = true;
+        }
+    }
 
     prevBtn.disabled = index === 0;
     nextBtn.disabled = index === areaPhotos.length - 1;
@@ -761,6 +1024,30 @@ startOverBtn?.addEventListener('click', () => {
 saveDraftBtn?.addEventListener('click', () => {
     alert('Draft saved locally. Submit or export from the Report step to finalize.');
 });
+
+// Attach drawing handlers as soon as DOM is ready
+const attachDrawingHandlers = () => {
+    if (window.__resultsDrawingHandlersAttached) return;
+    
+    const viewerStage = getViewerStage();
+    if (viewerStage) {
+        viewerStage.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        window.__resultsDrawingHandlersAttached = true;
+        console.log('Drawing handlers attached');
+    } else {
+        // Retry if viewer-stage doesn't exist yet
+        setTimeout(attachDrawingHandlers, 100);
+    }
+};
+
+// Try to attach handlers immediately, and also when DOMContentLoaded fires
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachDrawingHandlers);
+} else {
+    attachDrawingHandlers();
+}
 
 const initialState = ensureTaggingComplete();
 

@@ -269,3 +269,32 @@ export const generateReportId = () => {
     return `${tail}-${timestamp}`.slice(0, 18);
 };
 
+export const addManualDetection = (detection) =>
+    updateState((draft) => {
+        // Generate unique ID for manual detection
+        const maxId = draft.detections.reduce((max, det) => {
+            const match = det.id?.match(/^manual-(\d+)$/);
+            if (match) {
+                const num = parseInt(match[1], 10);
+                return Math.max(max, num);
+            }
+            return max;
+        }, 0);
+        const newId = `manual-${maxId + 1}`;
+        
+        draft.detections.push({
+            id: newId,
+            ...detection,
+            manual: true,
+            confidence: 'Manual',
+            falsePositive: false
+        });
+        return draft;
+    });
+
+export const removeDetection = (detectionId) =>
+    updateState((draft) => {
+        draft.detections = draft.detections.filter((detection) => detection.id !== detectionId);
+        return draft;
+    });
+
