@@ -15,8 +15,7 @@ import {
     toggleFalsePositive,
     toInspectionAreaSlug
 } from './state.js';
-
-const THUMBNAIL_HEIGHT = 140;
+import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 
 // Color palette for different defect classes
 const DEFECT_COLORS = [
@@ -39,13 +38,6 @@ const getColorForClass = (className) => {
     }
     const index = Math.abs(hash) % DEFECT_COLORS.length;
     return DEFECT_COLORS[index];
-};
-
-const clampNumber = (value, min, max) => {
-    if (Number.isNaN(value)) return min;
-    if (value < min) return min;
-    if (value > max) return max;
-    return value;
 };
 
 const thumbnailCache = new Map();
@@ -111,57 +103,6 @@ const applyNms = (detections, threshold = 0.5) => {
     const noBox = detections.filter((det) => !toBox(det));
     return [...keep, ...noBox];
 };
-
-const createCroppedThumbnail = (dataURL, bbox) =>
-    new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => {
-            const imageWidth = image.naturalWidth || image.width;
-            const imageHeight = image.naturalHeight || image.height;
-            const width = bbox?.width ?? bbox?.w ?? null;
-            const height = bbox?.height ?? bbox?.h ?? null;
-            const centerX = bbox?.centerX ?? bbox?.x ?? null;
-            const centerY = bbox?.centerY ?? bbox?.y ?? null;
-
-            if (!width || !height || !centerX || !centerY || !imageWidth || !imageHeight) {
-                resolve({ src: dataURL, width: THUMBNAIL_HEIGHT });
-                return;
-            }
-
-            const cropWidth = Math.max(width, imageWidth * 0.08);
-            const cropHeight = Math.max(height, imageHeight * 0.08);
-            const cropLeft = clampNumber(centerX - cropWidth / 2, 0, imageWidth - cropWidth);
-            const cropTop = clampNumber(centerY - cropHeight / 2, 0, imageHeight - cropHeight);
-
-            const scale = THUMBNAIL_HEIGHT / cropHeight;
-            const targetHeight = THUMBNAIL_HEIGHT;
-            const targetWidth = clampNumber(Math.round(cropWidth * scale), targetHeight * 0.6, targetHeight * 2.2);
-
-            const canvas = document.createElement('canvas');
-            canvas.width = Math.round(targetWidth);
-            canvas.height = Math.round(targetHeight);
-            const ctx = canvas.getContext('2d', { alpha: true });
-            if (!ctx) {
-                resolve({ src: dataURL, width: targetHeight });
-                return;
-            }
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(
-                image,
-                cropLeft,
-                cropTop,
-                cropWidth,
-                cropHeight,
-                0,
-                0,
-                canvas.width,
-                canvas.height
-            );
-            resolve({ src: canvas.toDataURL('image/png'), width: canvas.width });
-        };
-        image.onerror = reject;
-        image.src = dataURL;
-    });
 
 const statusBanner = document.getElementById('statusBanner');
 const statusTitle = document.getElementById('statusTitle');
@@ -598,7 +539,8 @@ const renderOverlay = (state, photo) => {
     overlayLayer.innerHTML = '';
     if (!photo || !resultImage.complete) return;
 
-    const detections = filterDetections(state, photo.area, { photoId: photo.id, includeFalsePositives: true });
+    // Hide false positives on the main image overlay
+    const detections = filterDetections(state, photo.area, { photoId: photo.id, includeFalsePositives: false });
     if (!detections.length) return;
 
     // Get the container (viewer-stage) dimensions
@@ -858,6 +800,7 @@ const renderDetectionList = (state, area, photo) => {
             toggle.type = 'button';
             toggle.className = 'ghost toggle-icon';
             toggle.setAttribute('aria-label', detection.falsePositive ? 'Restore detection' : 'Mark false positive');
+            // Use icon-style glyphs to match previous UI
             toggle.textContent = detection.falsePositive ? '↻' : '×';
             toggle.addEventListener('click', (event) => {
                 event.stopPropagation();

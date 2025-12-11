@@ -4,6 +4,7 @@ import {
     summarizeDetectionsByArea,
     updateReportOptions
 } from './state.js';
+import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 import { PDFDocument, StandardFonts, rgb } from 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
 
 // Color palette for different defect classes
@@ -101,9 +102,9 @@ const renderSummary = () => {
 };
 
 const filterIncludedDetections = (state) => {
-    const includeFalsePositives = state.report.includeFalsePositives;
     return state.detections.filter((detection) => {
-        if (!includeFalsePositives && detection.falsePositive) return false;
+        if (detection.falsePositive) return false;
+        if (detection.manual) return true;
         if (typeof detection.confidence === 'number' && detection.confidence < state.analysis.threshold) return false;
         return true;
     });
@@ -211,79 +212,54 @@ const createAnnotatedImage = async (photo, detections, highlightId) => {
     return canvas.toDataURL('image/png');
 };
 
-// Create thumbnail from detection bbox
-const createThumbnail = async (photo, detection, size = 200) => {
-    const image = await loadImage(photo.dataURL);
-    const imageWidth = image.naturalWidth || image.width;
-    const imageHeight = image.naturalHeight || image.height;
-    const bbox = detection.bbox || {};
-    
-    const centerX = bbox.centerX ?? bbox.x ?? null;
-    const centerY = bbox.centerY ?? bbox.y ?? null;
-    const boxWidth = bbox.width ?? bbox.w ?? null;
-    const boxHeight = bbox.height ?? bbox.h ?? null;
-    const sourceWidth = bbox.imageWidth || imageWidth;
-    const sourceHeight = bbox.imageHeight || imageHeight;
-    
-    if (!centerX || !centerY || !boxWidth || !boxHeight) {
-        // Fallback: use full image scaled down
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.drawImage(image, 0, 0, size, size);
-            return canvas.toDataURL('image/png');
-        }
-        return photo.dataURL;
-    }
-    
-    // Calculate crop area with padding
-    const scaleX = imageWidth / sourceWidth;
-    const scaleY = imageHeight / sourceHeight;
-    const cropWidth = Math.max(boxWidth * scaleX * 1.5, imageWidth * 0.1);
-    const cropHeight = Math.max(boxHeight * scaleY * 1.5, imageHeight * 0.1);
-    const cropLeft = Math.max(0, Math.min(imageWidth - cropWidth, centerX * scaleX - cropWidth / 2));
-    const cropTop = Math.max(0, Math.min(imageHeight - cropHeight, centerY * scaleY - cropHeight / 2));
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return photo.dataURL;
-    
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(
-        image,
-        cropLeft, cropTop, cropWidth, cropHeight,
-        0, 0, size, size
-    );
-    
-    // Draw bounding box on thumbnail
-    const thumbScaleX = size / cropWidth;
-    const thumbScaleY = size / cropHeight;
-    const thumbLeft = (centerX * scaleX - cropLeft) * thumbScaleX - (boxWidth * scaleX * thumbScaleX) / 2;
-    const thumbTop = (centerY * scaleY - cropTop) * thumbScaleY - (boxHeight * scaleY * thumbScaleY) / 2;
-    const thumbWidth = boxWidth * scaleX * thumbScaleX;
-    const thumbHeight = boxHeight * scaleY * thumbScaleY;
-    
-    ctx.strokeStyle = '#ff0000';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(thumbLeft, thumbTop, thumbWidth, thumbHeight);
-    
-    return canvas.toDataURL('image/png');
-};
-
 const addLine = (page, text, fonts, cursor, options = {}) => {
     const { font = fonts.regular, size = 12, color = rgb(0.1, 0.1, 0.1), lineHeight = 16 } = options;
     page.drawText(text, { x: cursor.margin, y: cursor.y, size, font, color });
     cursor.y -= lineHeight;
 };
 
+const wrapText = (text, font, size, maxWidth) => {
+    if (!text) return [''];
+    const words = text.split(/\s+/);
+    const lines = [];
+    let currentLine = '';
+    words.forEach((word) => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const width = font.widthOfTextAtSize(testLine, size);
+        if (width > maxWidth && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+        } else {
+            currentLine = testLine;
+        }
+    });
+    if (currentLine) lines.push(currentLine);
+    return lines.length ? lines : [''];
+};
+
+const drawWrappedText = (page, text, x, y, options) => {
+    const { font, size, color, maxWidth, lineHeight } = options;
+    const lines = wrapText(text, font, size, maxWidth);
+    lines.forEach((line, idx) => {
+        page.drawText(line, { x, y: y - idx * lineHeight, size, font, color });
+    });
+    return lines.length;
+};
+
 const addKeyValue = (page, key, value, fonts, cursor) => {
-    page.drawText(`${key}:`, { x: cursor.margin, y: cursor.y, size: 12, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-    page.drawText(value, { x: cursor.margin + 120, y: cursor.y, size: 12, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
-    cursor.y -= 16;
+    const keyX = cursor.margin;
+    const valueX = cursor.margin + 130;
+    const maxWidth = 612 - cursor.margin - valueX;
+    const lineHeight = 14;
+    page.drawText(`${key}:`, { x: keyX, y: cursor.y, size: 12, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+    const lineCount = drawWrappedText(page, value, valueX, cursor.y, {
+        font: fonts.regular,
+        size: 12,
+        color: rgb(0.1, 0.1, 0.1),
+        maxWidth,
+        lineHeight
+    });
+    cursor.y -= lineCount * lineHeight;
 };
 
 const ensureSpace = (pdfDoc, cursor, needed) => {
@@ -355,35 +331,80 @@ const generatePdf = async () => {
     if (includedDetections.length > 0) {
         ensureSpace(pdfDoc, cursor, 40);
         
-        // Table header
-        const tableY = cursor.y;
-        const col1 = cursor.margin;
-        const col2 = col1 + 80;
-        const col3 = col2 + 120;
-        const col4 = col3 + 100;
-        const col5 = col4 + 100;
-        
-        cursor.page.drawText('ID', { x: col1, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-        cursor.page.drawText('Defect Type', { x: col2, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-        cursor.page.drawText('Location', { x: col3, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-        cursor.page.drawText('Photo #', { x: col4, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-        cursor.page.drawText('Confidence', { x: col5, y: tableY, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        // Table header with explicit column widths to avoid overlap
+        const tableColumns = [
+            { key: 'id', label: 'ID', width: 55 },
+            { key: 'type', label: 'Defect Type', width: 150 },
+            { key: 'location', label: 'Location', width: 140 },
+            { key: 'photo', label: 'Photo #', width: 70 },
+            { key: 'confidence', label: 'Confidence', width: 90 }
+        ];
+        let columnX = cursor.margin;
+        tableColumns.forEach((col) => {
+            col.x = columnX;
+            columnX += col.width + 12;
+            cursor.page.drawText(col.label, { x: col.x, y: cursor.y, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        });
         
         cursor.y -= 16;
         
         // Table rows
         let findingIndex = 1;
+        const rowLineHeight = 12;
         for (const detection of includedDetections) {
-            ensureSpace(pdfDoc, cursor, 16);
             const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'N/A');
-            
-            cursor.page.drawText(`F-${String(findingIndex).padStart(3, '0')}`, { x: col1, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText(detection.class || 'Defect', { x: col2, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText(detection.area || 'N/A', { x: col3, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText(`#${detection.photoNumber}`, { x: col4, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText(confidence, { x: col5, y: cursor.y, size: 9, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
-            
-            cursor.y -= 14;
+            const defectType = detection.class || 'Defect';
+            const location = detection.area || 'N/A';
+            const photoText = `#${detection.photoNumber}`;
+
+            const wrapped = {
+                id: wrapText(`F-${String(findingIndex).padStart(3, '0')}`, fonts.regular, 9, tableColumns[0].width),
+                type: wrapText(defectType, fonts.regular, 9, tableColumns[1].width),
+                location: wrapText(location, fonts.regular, 9, tableColumns[2].width),
+                photo: wrapText(photoText, fonts.regular, 9, tableColumns[3].width),
+                confidence: wrapText(confidence, fonts.regular, 9, tableColumns[4].width)
+            };
+            const maxLines = Math.max(...Object.values(wrapped).map((lines) => lines.length));
+            const rowHeight = maxLines * rowLineHeight + 4;
+            ensureSpace(pdfDoc, cursor, rowHeight + 4);
+
+            drawWrappedText(cursor.page, wrapped.id.join(' '), tableColumns[0].x, cursor.y, {
+                font: fonts.regular,
+                size: 9,
+                color: rgb(0.1, 0.1, 0.1),
+                maxWidth: tableColumns[0].width,
+                lineHeight: rowLineHeight
+            });
+            drawWrappedText(cursor.page, defectType, tableColumns[1].x, cursor.y, {
+                font: fonts.regular,
+                size: 9,
+                color: rgb(0.1, 0.1, 0.1),
+                maxWidth: tableColumns[1].width,
+                lineHeight: rowLineHeight
+            });
+            drawWrappedText(cursor.page, location, tableColumns[2].x, cursor.y, {
+                font: fonts.regular,
+                size: 9,
+                color: rgb(0.1, 0.1, 0.1),
+                maxWidth: tableColumns[2].width,
+                lineHeight: rowLineHeight
+            });
+            drawWrappedText(cursor.page, photoText, tableColumns[3].x, cursor.y, {
+                font: fonts.regular,
+                size: 9,
+                color: rgb(0.1, 0.1, 0.1),
+                maxWidth: tableColumns[3].width,
+                lineHeight: rowLineHeight
+            });
+            drawWrappedText(cursor.page, confidence, tableColumns[4].x, cursor.y, {
+                font: fonts.regular,
+                size: 9,
+                color: rgb(0.1, 0.1, 0.1),
+                maxWidth: tableColumns[4].width,
+                lineHeight: rowLineHeight
+            });
+
+            cursor.y -= rowHeight;
             findingIndex++;
         }
     } else {
@@ -400,10 +421,11 @@ const generatePdf = async () => {
         addSectionTitle('DETAILED FINDINGS');
 
         let findingIndex = 1;
-        const THUMBNAIL_SIZE = 200;
+        const THUMBNAIL_SIZE = THUMBNAIL_HEIGHT;
         const THUMBNAIL_MARGIN = 20;
+        const THUMBNAIL_TOP_PADDING = 16; // Gap between text block and thumbnail
         const DETAILS_X = cursor.margin + THUMBNAIL_SIZE + THUMBNAIL_MARGIN;
-        const FINDING_HEIGHT = 240; // Space per finding
+        const FINDING_HEIGHT = THUMBNAIL_SIZE + THUMBNAIL_TOP_PADDING + 80; // Space per finding
         const FINDINGS_PER_PAGE = 2;
 
         for (const detection of includedDetections) {
@@ -429,100 +451,126 @@ const generatePdf = async () => {
             const findingStartY = cursor.y;
             
             // Title
-            cursor.page.drawText(findingTitle, {
-                x: DETAILS_X,
-                y: cursor.y,
-                size: 12,
-                font: fonts.bold,
-                color: rgb(0.1, 0.1, 0.1)
+            const maxDetailWidth = 612 - DETAILS_X - cursor.margin;
+            const titleLines = wrapText(findingTitle, fonts.bold, 12, maxDetailWidth);
+            titleLines.forEach((line, idx) => {
+                cursor.page.drawText(line, {
+                    x: DETAILS_X,
+                    y: cursor.y - idx * 14,
+                    size: 12,
+                    font: fonts.bold,
+                    color: rgb(0.1, 0.1, 0.1)
+                });
             });
-            cursor.y -= 16;
+            cursor.y -= titleLines.length * 14;
             
             // Subtitle
-            cursor.page.drawText(`${detection.area || 'Unknown component'} · ${detectionLabel}`, {
-                x: DETAILS_X,
-                y: cursor.y,
-                size: 10,
-                font: fonts.regular,
-                color: rgb(0.4, 0.4, 0.4)
+            const subtitle = `${detection.area || 'Unknown component'} · ${detectionLabel}`;
+            const subtitleLines = wrapText(subtitle, fonts.regular, 10, maxDetailWidth);
+            subtitleLines.forEach((line, idx) => {
+                cursor.page.drawText(line, {
+                    x: DETAILS_X,
+                    y: cursor.y - idx * 12,
+                    size: 10,
+                    font: fonts.regular,
+                    color: rgb(0.4, 0.4, 0.4)
+                });
             });
-            cursor.y -= 20;
+            cursor.y -= subtitleLines.length * 12 + 8;
 
             // Details on right side
             let detailY = cursor.y;
             
+            const detailWidth = maxDetailWidth - 55;
             cursor.page.drawText('Location:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText(`${detection.area || 'Area N/A'} · Photo #${detection.photoNumber}`, {
-                x: DETAILS_X + 50,
-                y: detailY,
-                size: 9,
-                font: fonts.regular,
-                color: rgb(0.1, 0.1, 0.1)
-            });
-            detailY -= 14;
-
-            cursor.page.drawText('Type:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText(detection.class || 'Defect', {
-                x: DETAILS_X + 50,
-                y: detailY,
-                size: 9,
-                font: fonts.regular,
-                color: rgb(0.1, 0.1, 0.1)
-            });
-            detailY -= 14;
-
-            cursor.page.drawText('Dimensions:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText(dims, {
-                x: DETAILS_X + 50,
-                y: detailY,
-                size: 9,
-                font: fonts.regular,
-                color: rgb(0.1, 0.1, 0.1)
-            });
-            detailY -= 14;
-
-            if (detection.manual) {
-                cursor.page.drawText('Detection:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-                cursor.page.drawText('Manual', {
-                    x: DETAILS_X + 50,
-                    y: detailY,
+            const locationLines = wrapText(`${detection.area || 'Area N/A'} · Photo #${detection.photoNumber}`, fonts.regular, 9, detailWidth);
+            locationLines.forEach((line, idx) => {
+                cursor.page.drawText(line, {
+                    x: DETAILS_X + 55,
+                    y: detailY - idx * 12,
                     size: 9,
                     font: fonts.regular,
                     color: rgb(0.1, 0.1, 0.1)
                 });
-            } else {
-                cursor.page.drawText('Confidence:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-                cursor.page.drawText(confidence, {
-                    x: DETAILS_X + 50,
-                    y: detailY,
+            });
+            detailY -= 14;
+
+            cursor.page.drawText('Type:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+            const typeLines = wrapText(detection.class || 'Defect', fonts.regular, 9, detailWidth);
+            typeLines.forEach((line, idx) => {
+                cursor.page.drawText(line, {
+                    x: DETAILS_X + 55,
+                    y: detailY - idx * 12,
                     size: 9,
                     font: fonts.regular,
                     color: rgb(0.1, 0.1, 0.1)
+                });
+            });
+            detailY -= Math.max(typeLines.length, 1) * 12;
+
+            cursor.page.drawText('Dimensions:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+            const dimLines = wrapText(dims, fonts.regular, 9, detailWidth);
+            dimLines.forEach((line, idx) => {
+                cursor.page.drawText(line, {
+                    x: DETAILS_X + 55,
+                    y: detailY - idx * 12,
+                    size: 9,
+                    font: fonts.regular,
+                    color: rgb(0.1, 0.1, 0.1)
+                });
+            });
+            detailY -= Math.max(dimLines.length, 1) * 12;
+
+            const labelWidth = detailWidth;
+            if (detection.manual) {
+                cursor.page.drawText('Detection:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+                drawWrappedText(cursor.page, 'Manual', DETAILS_X + 55, detailY, {
+                    font: fonts.regular,
+                    size: 9,
+                    color: rgb(0.1, 0.1, 0.1),
+                    maxWidth: labelWidth,
+                    lineHeight: 12
+                });
+            } else {
+                cursor.page.drawText('Confidence:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+                drawWrappedText(cursor.page, confidence, DETAILS_X + 55, detailY, {
+                    font: fonts.regular,
+                    size: 9,
+                    color: rgb(0.1, 0.1, 0.1),
+                    maxWidth: labelWidth,
+                    lineHeight: 12
                 });
             }
             detailY -= 14;
 
             cursor.page.drawText('Action:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-            cursor.page.drawText('Verify and remediate', {
-                x: DETAILS_X + 50,
-                y: detailY,
-                size: 9,
-                font: fonts.regular,
-                color: rgb(0.1, 0.1, 0.1)
+            const actionLines = wrapText('Verify and remediate', fonts.regular, 9, labelWidth);
+            actionLines.forEach((line, idx) => {
+                cursor.page.drawText(line, {
+                    x: DETAILS_X + 55,
+                    y: detailY - idx * 12,
+                    size: 9,
+                    font: fonts.regular,
+                    color: rgb(0.1, 0.1, 0.1)
+                });
             });
 
             // Thumbnail on left side
             if (photo?.dataURL) {
                 try {
-                    const thumbnail = await createThumbnail(photo, detection, THUMBNAIL_SIZE);
-                    const thumbImage = await pdfDoc.embedPng(thumbnail);
-                    const thumbY = findingStartY - THUMBNAIL_SIZE;
+                    const thumbResult = await createCroppedThumbnail(photo.dataURL, detection.bbox, THUMBNAIL_SIZE);
+                    const thumbImage = await pdfDoc.embedPng(thumbResult.src);
+                    const displayWidth = THUMBNAIL_SIZE;
+                    const scale = displayWidth / thumbResult.width;
+                    const displayHeight = thumbResult.height * scale;
+                    // Place thumbnail below the text block to avoid overlap
+                    const thumbY = findingStartY - THUMBNAIL_TOP_PADDING - displayHeight;
                     
                     cursor.page.drawImage(thumbImage, {
                         x: cursor.margin,
                         y: thumbY,
-                        width: THUMBNAIL_SIZE,
-                        height: THUMBNAIL_SIZE
+                        width: displayWidth,
+                        height: displayHeight
                     });
                 } catch (error) {
                     console.error('Failed to embed thumbnail', error);
