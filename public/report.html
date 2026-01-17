@@ -69,6 +69,15 @@
                 <div class="muted" id="reportPreviewDetail"></div>
             </div>
 
+            <div class="report-3d-viewer">
+                <h3>3D Visualization</h3>
+                <div class="info-banner">
+                    <strong>Interactive Model</strong>
+                    <span>Engines section colored by defect count. White = 0 defects, Red = 10+ defects.</span>
+                </div>
+                <div id="report3DViewer" class="report-3d-container"></div>
+            </div>
+
             <footer class="card-footer">
                 <div class="button-row">
                     <button class="secondary" id="backToResultsBtn">Back to Results</button>
@@ -79,8 +88,17 @@
         </section>
     </main>
 
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
     <script type="module" src="state.js"></script>
     <script type="module" src="report.js"></script>
+    <script type="module" src="report-3d-viewer.js"></script>
 </body>
 </html>
 
