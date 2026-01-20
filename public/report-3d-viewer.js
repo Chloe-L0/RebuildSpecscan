@@ -1,4 +1,4 @@
-import { readState, AREA_COLORS, AREAS } from './state.js';
+import { readState } from './state.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -12,16 +12,25 @@ let resizeHandler = null;
 let viewerReady = false;
 
 // Section name to mask filename mapping
-// Only Engines mask is available - other sections will be added when their masks are ready
 const SECTION_MASK_MAP = {
-    'Engines': 'Engines.png'
-    // Future sections will be added here when masks are ready:
-    // 'FWD Fuselage': 'FWDFuselage.png',
-    // 'MID Fuselage': 'MIDFuselage.png',
-    // 'Wings': 'Wings.png',
-    // 'AFT Fuselage': 'AFTFuselage.png',
-    // 'Vertical Stabilizer': 'VerticalStabilizer.png',
-    // 'Horizontal Stabilizer': 'HorizontalStabilizer.png'
+    'FWD Fuselage': 'FWDFuselage.png',
+    'MID Fuselage': 'MIDFuselage.png',
+    'Wings': 'Wings.png',
+    'AFT Fuselage': 'AFTFuselage.png',
+    'Engines': 'Engines.png',
+    'Vertical Stabilizer': 'VerticalStabilizer.png',
+    'Horizontal Stabilizer': 'HorizontalStabilizer.png'
+};
+
+// Section colors at 10+ defects (RGB values)
+const SECTION_MAX_COLORS = {
+    'FWD Fuselage': { r: 0, g: 102, b: 76 },      // rgb(0, 102, 76)
+    'MID Fuselage': { r: 25, g: 102, b: 0 },      // rgb(25, 102, 0)
+    'Wings': { r: 0, g: 31, b: 102 },             // rgb(0, 31, 102)
+    'AFT Fuselage': { r: 102, g: 0, b: 0 },        // rgb(102, 0, 0)
+    'Engines': { r: 83, g: 0, b: 102 },            // rgb(83, 0, 102)
+    'Vertical Stabilizer': { r: 102, g: 57, b: 0 }, // rgb(102, 57, 0)
+    'Horizontal Stabilizer': { r: 99, g: 102, b: 0 } // rgb(99, 102, 0)
 };
 
 // Convert hex color to THREE.Color
@@ -32,18 +41,29 @@ const hexToColor = (hex) => {
     return new THREE.Color(r, g, b);
 };
 
-// Calculate heat mapping color based on defect count
-const calculateHeatColor = (defectCount) => {
+// Calculate heat mapping color based on defect count for a specific section
+const calculateHeatColor = (defectCount, sectionName) => {
+    // All sections start at white (255, 255, 255) for 0 defects
     if (defectCount === 0) {
-        return new THREE.Color(1, 1, 1); // White: no tint
-    } else if (defectCount >= 10) {
-        return new THREE.Color(255 / 255, 50 / 255, 0 / 255); // Bright Red: #FF3200
+        return new THREE.Color(1, 1, 1); // White: rgb(255, 255, 255)
+    }
+    
+    // Get the section's max color (at 10+ defects)
+    const maxColor = SECTION_MAX_COLORS[sectionName];
+    if (!maxColor) {
+        // Fallback to white if section not found
+        return new THREE.Color(1, 1, 1);
+    }
+    
+    if (defectCount >= 10) {
+        // At 10+ defects, use the section's specific color
+        return new THREE.Color(maxColor.r / 255, maxColor.g / 255, maxColor.b / 255);
     } else {
-        // Linear interpolation for 1-9 defects (Yellow to Orange gradient)
+        // Linear interpolation for 1-9 defects between white and section max color
         const factor = defectCount / 10;
-        const r = 255 / 255;
-        const g = (255 - 205 * factor) / 255; // 255 -> 50
-        const b = (255 - 255 * factor) / 255; // 255 -> 0
+        const r = (255 - (255 - maxColor.r) * factor) / 255;
+        const g = (255 - (255 - maxColor.g) * factor) / 255;
+        const b = (255 - (255 - maxColor.b) * factor) / 255;
         return new THREE.Color(r, g, b);
     }
 };
@@ -200,59 +220,122 @@ const applyVisualization = async (model, state) => {
             .map(photo => photo.area)
     );
     
-    // Only process sections that:
-    // 1. Have masks available (currently only Engines)
-    // 2. Have been inspected (photos tagged to that area)
+    // Process all sections that have masks available
+    // Apply visualization to all sections with masks, regardless of inspection status
+    // Uninspected sections will show with their base color and no heat mapping (white heat = no tint)
     const sectionsWithMasksAvailable = Object.keys(SECTION_MASK_MAP);
-    const sectionsToProcess = sectionsWithMasksAvailable.filter(area => 
-        inspectedAreas.has(area) // Only color sections that have been inspected
-    );
     
-    // If no sections were inspected, return model with default materials
-    if (sectionsToProcess.length === 0) {
-        // Model will remain in default gray/white colors
-        return;
-    }
-    
-    // Collect only inspected sections that have masks with their defect counts
-    const sections = sectionsToProcess.map(area => ({
+    // Collect all sections with masks, their defect counts, and heat colors
+    const sections = sectionsWithMasksAvailable.map(area => ({
         name: area,
         defectCount: countDefectsByArea(state, area),
-        baseColor: hexToColor(AREA_COLORS[area].primary),
-        heatColor: calculateHeatColor(countDefectsByArea(state, area))
+        heatColor: calculateHeatColor(countDefectsByArea(state, area), area)
     }));
 
-    // Load masks only for inspected sections in SECTION_MASK_MAP
+    // Load masks for all sections
     const maskPromises = sections.map(section => 
         loadMaskTexture(section.name).then(texture => ({ ...section, maskTexture: texture }))
     );
     const sectionsWithMasks = await Promise.all(maskPromises);
+
+    // Create a combined material that applies all section masks
+    // We'll create a shader that blends all sections together
+    const createCombinedSectionMaterial = (originalMaterial, sectionsWithMasks) => {
+        let originalMap = null;
+        let originalBaseColor = new THREE.Color(1, 1, 1);
+        
+        if (originalMaterial) {
+            if (originalMaterial.color) {
+                originalBaseColor = originalMaterial.color.clone();
+            }
+            if (originalMaterial.map) {
+                originalMap = originalMaterial.map;
+            }
+        }
+
+        const hasTexture = originalMap !== null;
+        const validSections = sectionsWithMasks.filter(s => s.maskTexture !== null);
+        
+        // Build uniforms for all sections
+        const uniforms = {
+            u_originalBaseColor: { value: originalBaseColor },
+            u_heatIntensity: { value: 1.0 },
+            ...(hasTexture ? { u_originalTexture: { value: originalMap } } : {})
+        };
+        
+        // Add uniforms for each section
+        validSections.forEach((section, index) => {
+            uniforms[`u_mask_${index}`] = { value: section.maskTexture };
+            uniforms[`u_heatColor_${index}`] = { value: section.heatColor };
+        });
+        
+        uniforms.u_sectionCount = { value: validSections.length };
+
+        // Build fragment shader that applies heat colors based on masks
+        const fragmentShader = `
+            uniform vec3 u_originalBaseColor;
+            uniform float u_heatIntensity;
+            uniform int u_sectionCount;
+            ${hasTexture ? 'uniform sampler2D u_originalTexture;' : ''}
+            ${validSections.map((_, i) => `
+                uniform sampler2D u_mask_${i};
+                uniform vec3 u_heatColor_${i};
+            `).join('')}
+            varying vec2 vUv;
+            
+            void main() {
+                // Start with original texture or base color
+                vec3 base = u_originalBaseColor;
+                ${hasTexture ? `
+                vec4 texColor = texture2D(u_originalTexture, vUv);
+                base = mix(base, texColor.rgb, 0.7);
+                ` : ''}
+                
+                vec3 finalColor = base;
+                
+                // Apply each section mask - blend heat color only where mask is white
+                // White areas (maskValue = 1.0) get full heat color
+                // Black areas (maskValue = 0.0) keep original color
+                // Grayscale areas get smooth interpolation
+                ${validSections.map((_, i) => `
+                {
+                    vec4 mask_${i} = texture2D(u_mask_${i}, vUv);
+                    float maskValue_${i} = mask_${i}.r;
+                    
+                    // Blend heat color based on mask value
+                    finalColor = mix(finalColor, u_heatColor_${i}, maskValue_${i} * u_heatIntensity);
+                }
+                `).join('')}
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+        return new THREE.ShaderMaterial({
+            uniforms: uniforms,
+            vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: fragmentShader,
+            side: originalMaterial?.side !== undefined ? originalMaterial.side : THREE.FrontSide,
+            transparent: originalMaterial?.transparent || false,
+            opacity: originalMaterial?.opacity !== undefined ? originalMaterial.opacity : 1.0
+        });
+    };
 
     // Apply materials to model
     model.traverse((child) => {
         if (child.isMesh) {
             const originalMaterial = child.material;
             
-            // Start with original material, then apply sections that have masks
-            let currentMaterial = originalMaterial;
+            // Create combined material with all sections
+            const combinedMaterial = createCombinedSectionMaterial(originalMaterial, sectionsWithMasks);
             
-            // Apply each section that has a mask and was inspected
-            for (const section of sectionsWithMasks) {
-                if (section.maskTexture) {
-                    currentMaterial = createSectionMaterial(
-                        currentMaterial,
-                        section.baseColor,
-                        section.heatColor,
-                        section.maskTexture
-                    );
-                    break; // Currently only one mask (Engines), but structure supports multiple
-                }
-            }
-            
-            // Uninspected sections remain in their original gray/white model colors
-            // They will be colored when their masks are added to SECTION_MASK_MAP AND photos are tagged to them
-            
-            child.material = currentMaterial;
+            child.material = combinedMaterial;
         }
     });
 };
