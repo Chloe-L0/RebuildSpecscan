@@ -325,6 +325,236 @@ const generatePdf = async () => {
     addKeyValue(cursor.page, 'Inspection Method', 'Computer Vision Analysis', fonts, cursor);
 
     cursor.y -= 12;
+    addSectionTitle('AIRCRAFT SECTIONING FOR INSPECTION PROCESS');
+    
+    // Section color legend
+    ensureSpace(pdfDoc, cursor, 150);
+    cursor.page.drawText('Section Color Legend:', { 
+        x: cursor.margin, 
+        y: cursor.y, 
+        size: 12, 
+        font: fonts.bold, 
+        color: rgb(0.1, 0.1, 0.1) 
+    });
+    cursor.y -= 18;
+    
+    // Color legend entries with exact hex values
+    const sectionColors = [
+        { name: 'FWD Fuselage', color: [20, 184, 166] },   // Teal #14B8A6
+        { name: 'MID Fuselage', color: [16, 185, 129] },   // Green #10B981
+        { name: 'Wings', color: [59, 130, 246] },          // Blue #3B82F6
+        { name: 'AFT Fuselage', color: [239, 68, 68] },    // Red #EF4444
+        { name: 'Engines', color: [168, 85, 247] },        // Purple #A855F7
+        { name: 'Vertical Stabilizer', color: [249, 115, 22] }, // Orange #F97316
+        { name: 'Horizontal Stabilizer', color: [234, 179, 8] } // Yellow #EAB308
+    ];
+    
+    let legendX = cursor.margin;
+    let legendY = cursor.y;
+    const legendLineHeight = 16;
+    const legendBoxSize = 20; // Increased to 20px
+    const legendSpacing = 8; // Space between entries
+    const itemsPerRow = 3;
+    const itemWidth = 180; // Width per item including box and text
+    
+    sectionColors.forEach((section, idx) => {
+        if (idx > 0 && idx % itemsPerRow === 0) {
+            legendY -= legendLineHeight + 4;
+            legendX = cursor.margin;
+        }
+        
+        // Color box (20x20px)
+        cursor.page.drawRectangle({
+            x: legendX,
+            y: legendY - legendBoxSize,
+            width: legendBoxSize,
+            height: legendBoxSize,
+            color: rgb(
+                section.color[0] / 255,
+                section.color[1] / 255,
+                section.color[2] / 255
+            ),
+            borderColor: rgb(0.1, 0.1, 0.1),
+            borderWidth: 0.5
+        });
+        
+        // Section name
+        cursor.page.drawText(section.name, {
+            x: legendX + legendBoxSize + 8,
+            y: legendY - 2,
+            size: 9,
+            font: fonts.regular,
+            color: rgb(0.1, 0.1, 0.1)
+        });
+        
+        legendX += itemWidth;
+    });
+    
+    cursor.y = legendY - legendLineHeight - 20;
+    
+    // Technical reference views
+    ensureSpace(pdfDoc, cursor, 200);
+    cursor.page.drawText('Technical Reference Views:', {
+        x: cursor.margin,
+        y: cursor.y,
+        size: 12,
+        font: fonts.bold,
+        color: rgb(0.1, 0.1, 0.1)
+    });
+    cursor.y -= 18;
+    
+    // Try to capture 3D views
+    let technicalViews = { top: null, side: null, front: null };
+    if (typeof window !== 'undefined' && window.captureTechnicalViews) {
+        try {
+            technicalViews = await window.captureTechnicalViews();
+        } catch (error) {
+            console.error('Failed to capture technical views:', error);
+        }
+    }
+    
+    // Display views with proper aspect ratio and spacing
+    // Total available width: 512px (612 - 50 margin on each side)
+    // Three views with 20px gaps: (512 - 40) / 3 = ~157px per view
+    const viewSpacing = 20;
+    const availableWidth = 512; // 612 - cursor.margin * 2
+    const viewWidth = Math.floor((availableWidth - (viewSpacing * 2)) / 3); // ~157px
+    const viewsPerRow = 3;
+    const totalViewsWidth = (viewWidth * viewsPerRow) + (viewSpacing * (viewsPerRow - 1));
+    const startX = cursor.margin + (612 - cursor.margin * 2 - totalViewsWidth) / 2;
+    
+    const views = [
+        { key: 'top', label: 'Top View', dataUrl: technicalViews.top },
+        { key: 'side', label: 'Side View', dataUrl: technicalViews.side },
+        { key: 'front', label: 'Front View', dataUrl: technicalViews.front }
+    ];
+    
+    let currentX = startX;
+    const viewsStartY = cursor.y;
+    let maxViewHeight = 0;
+    
+    // First pass: embed images and calculate heights while maintaining aspect ratio
+    const viewData = [];
+    for (let i = 0; i < views.length; i++) {
+        const view = views[i];
+        
+        try {
+            if (view.dataUrl) {
+                // Embed screenshot and get dimensions
+                const viewImage = await pdfDoc.embedPng(view.dataUrl);
+                const imageDims = viewImage.scale(1);
+                const imageAspectRatio = imageDims.height / imageDims.width;
+                const displayHeight = viewWidth * imageAspectRatio;
+                
+                viewData.push({
+                    image: viewImage,
+                    width: viewWidth,
+                    height: displayHeight,
+                    label: view.label,
+                    hasImage: true
+                });
+                
+                maxViewHeight = Math.max(maxViewHeight, displayHeight);
+            } else {
+                // Placeholder rectangle
+                const placeholderHeight = viewWidth * 0.75; // 3:4 aspect ratio placeholder
+                viewData.push({
+                    image: null,
+                    width: viewWidth,
+                    height: placeholderHeight,
+                    label: view.label,
+                    hasImage: false
+                });
+                maxViewHeight = Math.max(maxViewHeight, placeholderHeight);
+            }
+        } catch (error) {
+            console.error(`Failed to embed ${view.key} view:`, error);
+            const placeholderHeight = viewWidth * 0.75;
+            viewData.push({
+                image: null,
+                width: viewWidth,
+                height: placeholderHeight,
+                label: view.label,
+                hasImage: false
+            });
+            maxViewHeight = Math.max(maxViewHeight, placeholderHeight);
+        }
+    }
+    
+    // Second pass: draw all views aligned to top
+    currentX = startX;
+    for (let i = 0; i < viewData.length; i++) {
+        const view = viewData[i];
+        const viewY = viewsStartY - view.height;
+        
+        if (view.hasImage && view.image) {
+            // Draw image maintaining aspect ratio
+            cursor.page.drawImage(view.image, {
+                x: currentX,
+                y: viewY,
+                width: view.width,
+                height: view.height
+            });
+        } else {
+            // Draw placeholder
+            cursor.page.drawRectangle({
+                x: currentX,
+                y: viewY,
+                width: view.width,
+                height: view.height,
+                borderColor: rgb(0.8, 0.8, 0.8),
+                borderWidth: 1
+            });
+            const placeholderText = wrapText('View not available', fonts.regular, 9, view.width - 10);
+            drawWrappedText(cursor.page, placeholderText.join(' '), currentX + 5, viewY + view.height / 2, {
+                font: fonts.regular,
+                size: 9,
+                color: rgb(0.5, 0.5, 0.5),
+                maxWidth: view.width - 10,
+                lineHeight: 12
+            });
+        }
+        
+        // View label centered below image
+        const labelWidth = fonts.regular.widthOfTextAtSize(view.label, 10);
+        cursor.page.drawText(view.label, {
+            x: currentX + (view.width - labelWidth) / 2,
+            y: viewY - 14,
+            size: 10,
+            font: fonts.bold,
+            color: rgb(0.1, 0.1, 0.1)
+        });
+        
+        currentX += view.width + viewSpacing;
+    }
+    
+    cursor.y = viewsStartY - maxViewHeight - 40;
+    
+    // Heat mapping legend
+    ensureSpace(pdfDoc, cursor, 50);
+    cursor.page.drawText('Heat Mapping Legend:', {
+        x: cursor.margin,
+        y: cursor.y,
+        size: 10,
+        font: fonts.bold,
+        color: rgb(0.1, 0.1, 0.1)
+    });
+    cursor.y -= 14;
+    
+    const heatLegendText = 'Color intensity indicates defect concentration: White = 0 defects, Yellow-Orange gradient = 1-9 defects, Bright Red = 10+ defects. Heat mapping is overlaid on each section\'s designated color (Teal FWD, Green MID, Blue Wings, Red AFT, Purple Engines, Orange Vertical Stabilizer, Yellow Horizontal Stabilizer). Only inspected sections display color-coding; uninspected areas appear in neutral gray.';
+    const heatLegendLines = wrapText(heatLegendText, fonts.regular, 9, 612 - cursor.margin * 2);
+    heatLegendLines.forEach((line, idx) => {
+        cursor.page.drawText(line, {
+            x: cursor.margin,
+            y: cursor.y - idx * 12,
+            size: 9,
+            font: fonts.regular,
+            color: rgb(0.1, 0.1, 0.1)
+        });
+    });
+    cursor.y -= heatLegendLines.length * 12 + 12;
+
+    cursor.y -= 12;
     addSectionTitle('FINDINGS SUMMARY');
     
     // Summary table
@@ -421,15 +651,15 @@ const generatePdf = async () => {
         addSectionTitle('DETAILED FINDINGS');
 
         let findingIndex = 1;
-        const THUMBNAIL_SIZE = THUMBNAIL_HEIGHT;
-        const THUMBNAIL_MARGIN = 20;
-        const THUMBNAIL_TOP_PADDING = 16; // Gap between text block and thumbnail
-        const DETAILS_X = cursor.margin + THUMBNAIL_SIZE + THUMBNAIL_MARGIN;
-        const FINDING_HEIGHT = THUMBNAIL_SIZE + THUMBNAIL_TOP_PADDING + 80; // Space per finding
-        const FINDINGS_PER_PAGE = 2;
+        const THUMBNAIL_MAX_HEIGHT = 120; // Maximum thumbnail height
+        const THUMBNAIL_WIDTH = 140; // Base width for thumbnail area calculation
+        const THUMBNAIL_MARGIN = 18; // Gap between thumbnail and detail text (15-20px)
+        const DETAILS_X = cursor.margin + THUMBNAIL_WIDTH + THUMBNAIL_MARGIN;
+        const FINDING_HEIGHT = 175; // Compact: ~25px title/subtitle + ~120px content + ~30px spacing
+        const FINDINGS_PER_PAGE = 4; // Target 3-4 findings per page
 
         for (const detection of includedDetections) {
-            // Check if we need a new page (allow space for 2 findings per page)
+            // Check if we need a new page (target 3-4 findings per page)
             const findingsOnPage = (findingIndex - 1) % FINDINGS_PER_PAGE;
             if (findingsOnPage === 0 && findingIndex > 1) {
                 cursor.page = pdfDoc.addPage([612, 792]);
@@ -449,122 +679,152 @@ const generatePdf = async () => {
             const findingTitle = `Finding F-${String(findingIndex).padStart(3, '0')}: ${detection.class || 'Defect'}`;
             
             const findingStartY = cursor.y;
-            
-            // Title
             const maxDetailWidth = 612 - DETAILS_X - cursor.margin;
+            
+            // Title and Subtitle on right side (detail area), spanning down
+            // Title - draw at top, then move down
             const titleLines = wrapText(findingTitle, fonts.bold, 12, maxDetailWidth);
+            const titleY = cursor.y;
             titleLines.forEach((line, idx) => {
                 cursor.page.drawText(line, {
                     x: DETAILS_X,
-                    y: cursor.y - idx * 14,
+                    y: titleY - idx * 14,
                     size: 12,
                     font: fonts.bold,
                     color: rgb(0.1, 0.1, 0.1)
                 });
             });
-            cursor.y -= titleLines.length * 14;
+            const titleHeight = titleLines.length * 14;
+            const titleBottom = titleY - titleHeight;
+            cursor.y = titleBottom - 4; // 4px gap after title
             
-            // Subtitle
+            // Subtitle - draw below title, then move down
             const subtitle = `${detection.area || 'Unknown component'} · ${detectionLabel}`;
             const subtitleLines = wrapText(subtitle, fonts.regular, 10, maxDetailWidth);
+            const subtitleY = cursor.y;
             subtitleLines.forEach((line, idx) => {
                 cursor.page.drawText(line, {
                     x: DETAILS_X,
-                    y: cursor.y - idx * 12,
+                    y: subtitleY - idx * 12,
                     size: 10,
                     font: fonts.regular,
                     color: rgb(0.4, 0.4, 0.4)
                 });
             });
-            cursor.y -= subtitleLines.length * 12 + 8;
+            const subtitleHeight = subtitleLines.length * 12;
+            const subtitleBottom = subtitleY - subtitleHeight;
+            cursor.y = subtitleBottom - 8; // 8px gap after subtitle
 
-            // Details on right side
-            let detailY = cursor.y;
+            // Details start below subtitle - thumbnail aligns with details top
+            // This is where both thumbnail and details should start (after title/subtitle)
+            const thumbnailAndDetailsStartY = subtitleBottom - 8; // Start details after subtitle gap
+            let detailY = thumbnailAndDetailsStartY; // Start details at this position
             
             const detailWidth = maxDetailWidth - 55;
+            // Detail fields with compact 11px line spacing
             cursor.page.drawText('Location:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
             const locationLines = wrapText(`${detection.area || 'Area N/A'} · Photo #${detection.photoNumber}`, fonts.regular, 9, detailWidth);
             locationLines.forEach((line, idx) => {
                 cursor.page.drawText(line, {
                     x: DETAILS_X + 55,
-                    y: detailY - idx * 12,
+                    y: detailY - idx * 11,
                     size: 9,
                     font: fonts.regular,
                     color: rgb(0.1, 0.1, 0.1)
                 });
             });
-            detailY -= 14;
+            detailY -= Math.max(locationLines.length, 1) * 11;
 
             cursor.page.drawText('Type:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
             const typeLines = wrapText(detection.class || 'Defect', fonts.regular, 9, detailWidth);
             typeLines.forEach((line, idx) => {
                 cursor.page.drawText(line, {
                     x: DETAILS_X + 55,
-                    y: detailY - idx * 12,
+                    y: detailY - idx * 11,
                     size: 9,
                     font: fonts.regular,
                     color: rgb(0.1, 0.1, 0.1)
                 });
             });
-            detailY -= Math.max(typeLines.length, 1) * 12;
+            detailY -= Math.max(typeLines.length, 1) * 11;
 
             cursor.page.drawText('Dimensions:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
             const dimLines = wrapText(dims, fonts.regular, 9, detailWidth);
             dimLines.forEach((line, idx) => {
                 cursor.page.drawText(line, {
                     x: DETAILS_X + 55,
-                    y: detailY - idx * 12,
+                    y: detailY - idx * 11,
                     size: 9,
                     font: fonts.regular,
                     color: rgb(0.1, 0.1, 0.1)
                 });
             });
-            detailY -= Math.max(dimLines.length, 1) * 12;
+            detailY -= Math.max(dimLines.length, 1) * 11;
 
             const labelWidth = detailWidth;
             if (detection.manual) {
                 cursor.page.drawText('Detection:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-                drawWrappedText(cursor.page, 'Manual', DETAILS_X + 55, detailY, {
+                const manualLines = drawWrappedText(cursor.page, 'Manual', DETAILS_X + 55, detailY, {
                     font: fonts.regular,
                     size: 9,
                     color: rgb(0.1, 0.1, 0.1),
                     maxWidth: labelWidth,
-                    lineHeight: 12
+                    lineHeight: 11
                 });
+                detailY -= Math.max(manualLines, 1) * 11; // Move down by actual lines drawn
             } else {
                 cursor.page.drawText('Confidence:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-                drawWrappedText(cursor.page, confidence, DETAILS_X + 55, detailY, {
+                const confidenceLines = drawWrappedText(cursor.page, confidence, DETAILS_X + 55, detailY, {
                     font: fonts.regular,
                     size: 9,
                     color: rgb(0.1, 0.1, 0.1),
                     maxWidth: labelWidth,
-                    lineHeight: 12
+                    lineHeight: 11
                 });
+                detailY -= Math.max(confidenceLines, 1) * 11; // Move down by actual lines drawn
             }
-            detailY -= 14;
 
             cursor.page.drawText('Action:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
             const actionLines = wrapText('Verify and remediate', fonts.regular, 9, labelWidth);
             actionLines.forEach((line, idx) => {
                 cursor.page.drawText(line, {
                     x: DETAILS_X + 55,
-                    y: detailY - idx * 12,
+                    y: detailY - idx * 11,
                     size: 9,
                     font: fonts.regular,
                     color: rgb(0.1, 0.1, 0.1)
                 });
             });
+            detailY -= Math.max(actionLines.length, 1) * 11; // Move down after action lines
 
-            // Thumbnail on left side
+            // Calculate bottom of details section for cursor positioning
+            const detailsBottom = detailY;
+            
+            // Thumbnail on left side - aligned top with detail fields
+            let thumbnailBottom = findingStartY; // Default if no thumbnail
             if (photo?.dataURL) {
                 try {
-                    const thumbResult = await createCroppedThumbnail(photo.dataURL, detection.bbox, THUMBNAIL_SIZE);
+                    const thumbResult = await createCroppedThumbnail(photo.dataURL, detection.bbox, THUMBNAIL_MAX_HEIGHT);
                     const thumbImage = await pdfDoc.embedPng(thumbResult.src);
-                    const displayWidth = THUMBNAIL_SIZE;
-                    const scale = displayWidth / thumbResult.width;
-                    const displayHeight = thumbResult.height * scale;
-                    // Place thumbnail below the text block to avoid overlap
-                    const thumbY = findingStartY - THUMBNAIL_TOP_PADDING - displayHeight;
+                    // Scale thumbnail to fit max height while maintaining aspect ratio
+                    const aspectRatio = thumbResult.width / thumbResult.height;
+                    let displayHeight = thumbResult.height;
+                    let displayWidth = thumbResult.width;
+                    
+                    // Constrain to maximum height
+                    if (displayHeight > THUMBNAIL_MAX_HEIGHT) {
+                        displayHeight = THUMBNAIL_MAX_HEIGHT;
+                        displayWidth = displayHeight * aspectRatio;
+                    }
+                    
+                    // Ensure width doesn't exceed allocated space
+                    if (displayWidth > THUMBNAIL_WIDTH) {
+                        displayWidth = THUMBNAIL_WIDTH;
+                        displayHeight = displayWidth / aspectRatio;
+                    }
+                    
+                    // Place thumbnail aligned with detail fields (top aligned at thumbnailAndDetailsStartY)
+                    const thumbY = thumbnailAndDetailsStartY - displayHeight;
                     
                     cursor.page.drawImage(thumbImage, {
                         x: cursor.margin,
@@ -572,13 +832,18 @@ const generatePdf = async () => {
                         width: displayWidth,
                         height: displayHeight
                     });
+                    
+                    // Track thumbnail bottom for cursor positioning
+                    thumbnailBottom = thumbY;
                 } catch (error) {
                     console.error('Failed to embed thumbnail', error);
                 }
             }
 
             // Move cursor down for next finding
-            cursor.y = findingStartY - FINDING_HEIGHT;
+            // Use the lower of: details bottom or thumbnail bottom
+            const findingBottom = Math.min(detailsBottom, thumbnailBottom);
+            cursor.y = findingBottom - 30; // 30px gap before next finding
             findingIndex += 1;
         }
     }

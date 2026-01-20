@@ -14,13 +14,13 @@ const ENV_PATH = path.join(__dirname, 'backend', '.env');
 require('dotenv').config({ path: ENV_PATH });
 
 const ALLOWED_AREAS = new Set([
-    'fuselage',
-    'left-wing',
-    'right-wing',
+    'fwd-fuselage',
+    'mid-fuselage',
     'wings',
-    'tail',
+    'aft-fuselage',
     'engine',
-    'landing-gear'
+    'vertical-stabilizer',
+    'horizontal-stabilizer'
 ]);
 
 const app = express();

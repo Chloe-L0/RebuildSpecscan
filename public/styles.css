@@ -633,8 +633,9 @@ textarea:focus {
     position: absolute;
     border: 3px solid var(--danger);
     background: rgba(230, 57, 70, 0.18);
-    pointer-events: none;
+    pointer-events: all;
     border-radius: 6px;
+    cursor: pointer;
 }
 
 .overlay-box.highlight {
@@ -655,6 +656,98 @@ textarea:focus {
     color: #fff;
     font-size: 10px;
     letter-spacing: 0.08em;
+}
+
+.overlay-box.manual-detection {
+    cursor: move;
+}
+
+.overlay-box.manual-detection .resize-handles-container {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.overlay-box.manual-detection:hover .resize-handles-container {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.overlay-box.manual-detection .resize-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: #9ca3af;
+    border: 1px solid #ffffff;
+    border-radius: 2px;
+    z-index: 100;
+    pointer-events: all;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.overlay-box.manual-detection.highlight .resize-handle {
+    background-color: #ffd54f;
+}
+
+.overlay-box.manual-detection .resize-handle:hover {
+    background-color: #6b7280;
+    transform: scale(1.2);
+}
+
+.overlay-box.manual-detection.highlight .resize-handle:hover {
+    background-color: #f59e0b;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="nw"] {
+    top: -4px;
+    left: -4px;
+    cursor: nw-resize;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="n"] {
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: n-resize;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="ne"] {
+    top: -4px;
+    right: -4px;
+    cursor: ne-resize;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="e"] {
+    top: 50%;
+    right: -4px;
+    transform: translateY(-50%);
+    cursor: e-resize;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="se"] {
+    bottom: -4px;
+    right: -4px;
+    cursor: se-resize;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="s"] {
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    cursor: s-resize;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="sw"] {
+    bottom: -4px;
+    left: -4px;
+    cursor: sw-resize;
+}
+
+.overlay-box.manual-detection .resize-handle[data-handle="w"] {
+    top: 50%;
+    left: -4px;
+    transform: translateY(-50%);
+    cursor: w-resize;
 }
 
 .viewer-meta {

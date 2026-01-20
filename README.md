@@ -7,7 +7,7 @@ Predictive maintenance inspections made simple with SpecScan — a mobile-first 
 ## Features
 
 - **3-Step Inspection Flow**
-  1. Select airplane area (Fuselage, Wings, Tail, Landing Gear, Engine)
+  1. Select airplane area (FWD Fuselage, MID Fuselage, Wings, AFT Fuselage, Engines, Vertical Stabilizer, Horizontal Stabilizer)
   2. Capture or upload an inspection image (camera-friendly on mobile)
   3. Run AI-powered analysis and visualize detections on an overlay canvas
 - **Mobile-First UX** with large touch targets, responsive layout, and camera capture support.

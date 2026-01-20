@@ -1,51 +1,58 @@
 const STORAGE_KEY = 'specscanInspection';
 
 export const AREAS = [
-    'Fuselage',
-    'Left Wing',
-    'Right Wing',
-    'Tail',
-    'Landing Gear',
-    'Engines'
+    'FWD Fuselage',
+    'MID Fuselage',
+    'Wings',
+    'AFT Fuselage',
+    'Engines',
+    'Vertical Stabilizer',
+    'Horizontal Stabilizer'
 ];
 
-// Color scheme for each inspection area
+// Color scheme for each inspection area (matches technical reference view requirements)
 export const AREA_COLORS = {
-    'Fuselage': {
-        primary: '#2563eb',      // Blue
-        light: 'rgba(37, 99, 235, 0.12)',
-        border: 'rgba(37, 99, 235, 0.3)',
-        text: '#1e40af'
+    'FWD Fuselage': {
+        primary: '#14B8A6',      // Teal
+        light: 'rgba(20, 184, 166, 0.12)',
+        border: 'rgba(20, 184, 166, 0.3)',
+        text: '#0f766e'
     },
-    'Left Wing': {
-        primary: '#059669',      // Green
-        light: 'rgba(5, 150, 105, 0.12)',
-        border: 'rgba(5, 150, 105, 0.3)',
+    'MID Fuselage': {
+        primary: '#10B981',      // Green
+        light: 'rgba(16, 185, 129, 0.12)',
+        border: 'rgba(16, 185, 129, 0.3)',
         text: '#047857'
     },
-    'Right Wing': {
-        primary: '#7c3aed',       // Purple
-        light: 'rgba(124, 58, 237, 0.12)',
-        border: 'rgba(124, 58, 237, 0.3)',
-        text: '#6d28d9'
+    'Wings': {
+        primary: '#3B82F6',       // Blue
+        light: 'rgba(59, 130, 246, 0.12)',
+        border: 'rgba(59, 130, 246, 0.3)',
+        text: '#1e40af'
     },
-    'Tail': {
-        primary: '#dc2626',       // Red
-        light: 'rgba(220, 38, 38, 0.12)',
-        border: 'rgba(220, 38, 38, 0.3)',
-        text: '#b91c1c'
-    },
-    'Landing Gear': {
-        primary: '#d97706',       // Orange
-        light: 'rgba(217, 119, 6, 0.12)',
-        border: 'rgba(217, 119, 6, 0.3)',
-        text: '#b45309'
+    'AFT Fuselage': {
+        primary: '#EF4444',       // Red
+        light: 'rgba(239, 68, 68, 0.12)',
+        border: 'rgba(239, 68, 68, 0.3)',
+        text: '#dc2626'
     },
     'Engines': {
-        primary: '#0284c7',       // Cyan
-        light: 'rgba(2, 132, 199, 0.12)',
-        border: 'rgba(2, 132, 199, 0.3)',
-        text: '#0369a1'
+        primary: '#A855F7',       // Purple
+        light: 'rgba(168, 85, 247, 0.12)',
+        border: 'rgba(168, 85, 247, 0.3)',
+        text: '#7c3aed'
+    },
+    'Vertical Stabilizer': {
+        primary: '#F97316',       // Orange
+        light: 'rgba(249, 115, 22, 0.12)',
+        border: 'rgba(249, 115, 22, 0.3)',
+        text: '#ea580c'
+    },
+    'Horizontal Stabilizer': {
+        primary: '#EAB308',       // Yellow
+        light: 'rgba(234, 179, 8, 0.12)',
+        border: 'rgba(234, 179, 8, 0.3)',
+        text: '#ca8a04'
     }
 };
 
@@ -59,12 +66,13 @@ export const getAreaColor = (area) => {
 };
 
 const AREA_SLUG_LOOKUP = {
-    Fuselage: 'fuselage',
-    'Left Wing': 'left-wing',
-    'Right Wing': 'right-wing',
-    Tail: 'tail',
-    'Landing Gear': 'landing-gear',
-    Engines: 'engine'
+    'FWD Fuselage': 'fwd-fuselage',
+    'MID Fuselage': 'mid-fuselage',
+    'Wings': 'wings',
+    'AFT Fuselage': 'aft-fuselage',
+    'Engines': 'engine',
+    'Vertical Stabilizer': 'vertical-stabilizer',
+    'Horizontal Stabilizer': 'horizontal-stabilizer'
 };
 
 export const toInspectionAreaSlug = (area) => {
@@ -347,3 +355,16 @@ export const removeDetection = (detectionId) =>
         return draft;
     });
 
+export const updateDetectionBbox = (detectionId, bbox) =>
+    updateState((draft) => {
+        draft.detections = draft.detections.map((detection) => {
+            if (detection.id === detectionId) {
+                return {
+                    ...detection,
+                    bbox: { ...detection.bbox, ...bbox }
+                };
+            }
+            return detection;
+        });
+        return draft;
+    });

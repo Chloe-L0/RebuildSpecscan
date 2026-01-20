@@ -13,7 +13,8 @@ import {
     setCurrentPhotoIndex,
     summarizeDetectionsByArea,
     toggleFalsePositive,
-    toInspectionAreaSlug
+    toInspectionAreaSlug,
+    updateDetectionBbox
 } from './state.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 
@@ -134,7 +135,30 @@ let drawStartX = 0;
 let drawStartY = 0;
 let previewBox = null;
 
+// Resize state for manual detection boxes
+let isResizing = false;
+let resizeHandle = null; // 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
+let resizeDetectionId = null;
+let resizeStartBox = null; // Original box dimensions when resize started
+let resizeStartX = 0;
+let resizeStartY = 0;
+
 const getViewerStage = () => document.querySelector('.viewer-stage');
+
+// Get cursor style for resize handle
+const getResizeCursor = (handle) => {
+    const cursors = {
+        'nw': 'nw-resize',
+        'n': 'n-resize',
+        'ne': 'ne-resize',
+        'e': 'e-resize',
+        'se': 'se-resize',
+        's': 's-resize',
+        'sw': 'sw-resize',
+        'w': 'w-resize'
+    };
+    return cursors[handle] || 'default';
+};
 
 // Convert screen coordinates to image coordinates
 const screenToImageCoords = (screenX, screenY) => {
@@ -213,10 +237,49 @@ const removePreviewBox = () => {
     }
 };
 
-// Handle mouse down - start drawing
+// Handle mouse down - start drawing or resizing
 const handleMouseDown = (event) => {
-    // Don't start drawing if clicking on a detection box or button
-    if (event.target.closest('.overlay-box') || event.target.closest('button')) {
+    // Check if clicking on a resize handle
+    const handle = event.target.closest('.resize-handle');
+    if (handle) {
+        isResizing = true;
+        resizeHandle = handle.dataset.handle;
+        resizeDetectionId = handle.closest('.overlay-box')?.dataset.predictionId;
+        resizeStartX = event.clientX;
+        resizeStartY = event.clientY;
+        
+        // Get current detection and store its box
+        const state = readState();
+        const detection = state.detections.find(d => d.id === resizeDetectionId);
+        if (detection && detection.bbox) {
+            resizeStartBox = {
+                centerX: detection.bbox.centerX,
+                centerY: detection.bbox.centerY,
+                width: detection.bbox.width,
+                height: detection.bbox.height,
+                imageWidth: detection.bbox.imageWidth || resultImage.naturalWidth,
+                imageHeight: detection.bbox.imageHeight || resultImage.naturalHeight
+            };
+        }
+        
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+    }
+    
+    // Don't start drawing if clicking on a resize handle
+    if (event.target.closest('.resize-handle')) {
+        // Resize handle click is handled separately
+        return;
+    }
+    
+    // Don't start drawing if clicking on a detection box - let the box's click handler handle it
+    if (event.target.closest('.overlay-box')) {
+        return;
+    }
+    
+    // Don't start drawing if clicking on buttons
+    if (event.target.closest('button')) {
         return;
     }
     
@@ -246,8 +309,89 @@ const handleMouseDown = (event) => {
     event.stopPropagation();
 };
 
-// Handle mouse move - update preview
+// Handle mouse move - update preview or resize
 const handleMouseMove = (event) => {
+    // Handle resizing
+    if (isResizing && resizeHandle && resizeDetectionId && resizeStartBox) {
+        const state = readState();
+        const detection = state.detections.find(d => d.id === resizeDetectionId);
+        if (!detection || !detection.manual) {
+            isResizing = false;
+            return;
+        }
+        
+        // Convert mouse movement to image coordinates
+        const deltaX = event.clientX - resizeStartX;
+        const deltaY = event.clientY - resizeStartY;
+        
+        const imageRect = resultImage.getBoundingClientRect();
+        const scaleX = resizeStartBox.imageWidth / imageRect.width;
+        const scaleY = resizeStartBox.imageHeight / imageRect.height;
+        
+        const deltaImageX = deltaX * scaleX;
+        const deltaImageY = deltaY * scaleY;
+        
+        // Calculate new box dimensions based on handle
+        // Note: resizeStartBox uses actual image coordinates (not expanded)
+        let newLeft = resizeStartBox.centerX - resizeStartBox.width / 2;
+        let newTop = resizeStartBox.centerY - resizeStartBox.height / 2;
+        let newRight = resizeStartBox.centerX + resizeStartBox.width / 2;
+        let newBottom = resizeStartBox.centerY + resizeStartBox.height / 2;
+        
+        // Adjust based on which handle is being dragged
+        if (resizeHandle.includes('w')) newLeft += deltaImageX;
+        if (resizeHandle.includes('e')) newRight += deltaImageX;
+        if (resizeHandle.includes('n')) newTop += deltaImageY;
+        if (resizeHandle.includes('s')) newBottom += deltaImageY;
+        
+        // Ensure valid dimensions
+        if (newRight <= newLeft) {
+            if (resizeHandle.includes('w')) newLeft = newRight - 10;
+            else newRight = newLeft + 10;
+        }
+        if (newBottom <= newTop) {
+            if (resizeHandle.includes('n')) newTop = newBottom - 10;
+            else newBottom = newTop + 10;
+        }
+        
+        const newWidth = newRight - newLeft;
+        const newHeight = newBottom - newTop;
+        const newCenterX = newLeft + newWidth / 2;
+        const newCenterY = newTop + newHeight / 2;
+        
+        // Minimum size check
+        if (newWidth < 10 || newHeight < 10) {
+            return;
+        }
+        
+        // Update detection bbox (store actual image coordinates, not expanded)
+        updateDetectionBbox(resizeDetectionId, {
+            centerX: newCenterX,
+            centerY: newCenterY,
+            width: newWidth,
+            height: newHeight,
+            imageWidth: resizeStartBox.imageWidth,
+            imageHeight: resizeStartBox.imageHeight
+        });
+        
+        // Update resize start box for next move event
+        resizeStartBox = {
+            centerX: newCenterX,
+            centerY: newCenterY,
+            width: newWidth,
+            height: newHeight,
+            imageWidth: resizeStartBox.imageWidth,
+            imageHeight: resizeStartBox.imageHeight
+        };
+        resizeStartX = event.clientX;
+        resizeStartY = event.clientY;
+        
+        render();
+        event.preventDefault();
+        return;
+    }
+    
+    // Handle drawing preview
     if (!isDrawing) return;
     const viewerStage = getViewerStage();
     if (!viewerStage) return;
@@ -272,8 +416,19 @@ const handleMouseMove = (event) => {
     event.preventDefault();
 };
 
-// Handle mouse up - finalize box
+// Handle mouse up - finalize box or resize
 const handleMouseUp = async (event) => {
+    // Handle resize end
+    if (isResizing) {
+        isResizing = false;
+        resizeHandle = null;
+        resizeDetectionId = null;
+        resizeStartBox = null;
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+    }
+    
     if (!isDrawing) return;
     
     const wasDrawing = isDrawing;
@@ -318,8 +473,8 @@ const handleMouseUp = async (event) => {
     const centerX = left + width / 2;
     const centerY = top + height / 2;
     
-    // Prompt for defect type
-    const defectType = prompt('Enter defect type:', 'manual_defect');
+    // Show dialog for defect type
+    const defectType = await showDefectTypeDialog();
     if (!defectType || defectType.trim() === '') {
         return;
     }
@@ -344,6 +499,137 @@ const handleMouseUp = async (event) => {
     render();
     event.preventDefault();
     event.stopPropagation();
+};
+
+// Show dialog for defect type input
+const showDefectTypeDialog = () => {
+    return new Promise((resolve) => {
+        // Create dialog overlay
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.right = '0';
+        overlay.style.bottom = '0';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '10000';
+        
+        // Create dialog box
+        const dialog = document.createElement('div');
+        dialog.style.backgroundColor = 'white';
+        dialog.style.padding = '24px';
+        dialog.style.borderRadius = '8px';
+        dialog.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
+        dialog.style.minWidth = '320px';
+        dialog.style.maxWidth = '90vw';
+        
+        // Title
+        const title = document.createElement('h3');
+        title.textContent = 'Manual Detection';
+        title.style.margin = '0 0 16px 0';
+        title.style.fontSize = '18px';
+        title.style.fontWeight = '600';
+        dialog.appendChild(title);
+        
+        // Instructions
+        const instructions = document.createElement('p');
+        instructions.textContent = 'Enter the defect type for this detection:';
+        instructions.style.margin = '0 0 12px 0';
+        instructions.style.color = '#666';
+        instructions.style.fontSize = '14px';
+        dialog.appendChild(instructions);
+        
+        // Common defect types
+        const commonTypes = ['Scratch', 'Dent', 'Crack', 'Corrosion', 'Paint Damage', 'Other'];
+        const typeButtons = document.createElement('div');
+        typeButtons.style.display = 'flex';
+        typeButtons.style.flexWrap = 'wrap';
+        typeButtons.style.gap = '8px';
+        typeButtons.style.marginBottom = '16px';
+        
+        commonTypes.forEach(type => {
+            const btn = document.createElement('button');
+            btn.textContent = type;
+            btn.className = 'secondary';
+            btn.style.padding = '8px 16px';
+            btn.style.fontSize = '14px';
+            btn.addEventListener('click', () => {
+                overlay.remove();
+                resolve(type);
+            });
+            typeButtons.appendChild(btn);
+        });
+        dialog.appendChild(typeButtons);
+        
+        // Input field
+        const inputWrapper = document.createElement('div');
+        inputWrapper.style.marginBottom = '16px';
+        
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Enter defect type';
+        input.style.width = '100%';
+        input.style.padding = '10px';
+        input.style.border = '1px solid #ddd';
+        input.style.borderRadius = '4px';
+        input.style.fontSize = '14px';
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (input.value.trim()) {
+                    overlay.remove();
+                    resolve(input.value.trim());
+                }
+            } else if (e.key === 'Escape') {
+                overlay.remove();
+                resolve('');
+            }
+        });
+        input.focus();
+        inputWrapper.appendChild(input);
+        dialog.appendChild(inputWrapper);
+        
+        // Buttons
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.gap = '8px';
+        buttons.style.justifyContent = 'flex-end';
+        
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'ghost';
+        cancelBtn.addEventListener('click', () => {
+            overlay.remove();
+            resolve('');
+        });
+        buttons.appendChild(cancelBtn);
+        
+        const confirmBtn = document.createElement('button');
+        confirmBtn.textContent = 'Add Detection';
+        confirmBtn.className = 'primary';
+        confirmBtn.addEventListener('click', () => {
+            const value = input.value.trim();
+            overlay.remove();
+            resolve(value);
+        });
+        buttons.appendChild(confirmBtn);
+        
+        dialog.appendChild(buttons);
+        overlay.appendChild(dialog);
+        
+        // Close on overlay click
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+                resolve('');
+            }
+        });
+        
+        document.body.appendChild(overlay);
+    });
 };
 
 // Resize handler for updating bounding boxes when window is resized
@@ -618,15 +904,24 @@ const renderOverlay = (state, photo) => {
         const box = document.createElement('div');
         box.className = 'overlay-box';
         const isHighlighted = activeHighlight === detection.id;
-        const classColor = getColorForClass(detection.class);
         
+        // Manual detections use grey color, AI detections use class-based colors
+        // All detections turn yellow when highlighted
         if (isHighlighted) {
+            // All highlighted detections use yellow
             box.classList.add('highlight');
             box.style.borderWidth = '4px';
             box.style.borderColor = '#ffd54f';
             box.style.backgroundColor = 'rgba(255, 213, 79, 0.3)';
             box.style.boxShadow = '0 0 0 2px rgba(255, 213, 79, 0.4)';
+        } else if (detection.manual) {
+            // Manual detections: grey when not highlighted
+            box.style.borderWidth = '3px';
+            box.style.borderColor = '#9ca3af'; // Grey border
+            box.style.backgroundColor = 'rgba(156, 163, 175, 0.2)'; // Light grey background
         } else {
+            // AI detections use class-based colors when not highlighted
+            const classColor = getColorForClass(detection.class);
             box.style.borderWidth = '3px';
             box.style.borderColor = classColor.border;
             box.style.backgroundColor = classColor.bg;
@@ -636,11 +931,133 @@ const renderOverlay = (state, photo) => {
         box.style.width = `${scaledWidth}px`;
         box.style.height = `${scaledHeight}px`;
         box.dataset.predictionId = detection.id;
+        box.style.pointerEvents = 'all';
+        box.style.cursor = 'pointer';
+        
+        // Make detection boxes clickable to highlight corresponding thumbnail
+        box.addEventListener('click', (e) => {
+            // Don't trigger if clicking on resize handle
+            if (e.target.closest('.resize-handle')) {
+                return;
+            }
+            activeHighlight = detection.id;
+            render();
+            // Scroll the highlighted card into view
+            requestAnimationFrame(() => {
+                const highlightedCard = detectionList.querySelector(`[data-prediction-id="${detection.id}"]`);
+                if (highlightedCard) {
+                    highlightedCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+        });
+        
+        // Add resize handles for manual detections (shown on hover)
+        if (detection.manual) {
+            box.classList.add('manual-detection');
+            box.style.pointerEvents = 'all'; // Allow interaction with manual detection boxes
+            
+            // Create resize handles container (hidden by default, shown on hover)
+            const handlesContainer = document.createElement('div');
+            handlesContainer.className = 'resize-handles-container';
+            handlesContainer.style.position = 'absolute';
+            handlesContainer.style.top = '0';
+            handlesContainer.style.left = '0';
+            handlesContainer.style.width = '100%';
+            handlesContainer.style.height = '100%';
+            handlesContainer.style.pointerEvents = 'none';
+            handlesContainer.style.opacity = '0';
+            handlesContainer.style.transition = 'opacity 0.2s ease';
+            
+            // Create resize handles (corners and edges)
+            const handles = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+            handles.forEach(handle => {
+                const handleEl = document.createElement('div');
+                handleEl.className = 'resize-handle';
+                handleEl.dataset.handle = handle;
+                handleEl.style.position = 'absolute';
+                handleEl.style.width = '8px';
+                handleEl.style.height = '8px';
+                // Use grey for resize handles on manual detections (matches grey box color)
+                handleEl.style.backgroundColor = isHighlighted ? '#ffd54f' : '#9ca3af';
+                handleEl.style.border = '1px solid #ffffff';
+                handleEl.style.borderRadius = '2px';
+                handleEl.style.cursor = getResizeCursor(handle);
+                handleEl.style.zIndex = '100';
+                handleEl.style.pointerEvents = 'all';
+                
+                // Position handles
+                if (handle === 'nw') {
+                    handleEl.style.top = '-4px';
+                    handleEl.style.left = '-4px';
+                } else if (handle === 'n') {
+                    handleEl.style.top = '-4px';
+                    handleEl.style.left = '50%';
+                    handleEl.style.transform = 'translateX(-50%)';
+                } else if (handle === 'ne') {
+                    handleEl.style.top = '-4px';
+                    handleEl.style.right = '-4px';
+                } else if (handle === 'e') {
+                    handleEl.style.top = '50%';
+                    handleEl.style.right = '-4px';
+                    handleEl.style.transform = 'translateY(-50%)';
+                } else if (handle === 'se') {
+                    handleEl.style.bottom = '-4px';
+                    handleEl.style.right = '-4px';
+                } else if (handle === 's') {
+                    handleEl.style.bottom = '-4px';
+                    handleEl.style.left = '50%';
+                    handleEl.style.transform = 'translateX(-50%)';
+                } else if (handle === 'sw') {
+                    handleEl.style.bottom = '-4px';
+                    handleEl.style.left = '-4px';
+                } else if (handle === 'w') {
+                    handleEl.style.top = '50%';
+                    handleEl.style.left = '-4px';
+                    handleEl.style.transform = 'translateY(-50%)';
+                }
+                
+                handlesContainer.appendChild(handleEl);
+            });
+            
+            // Show handles on hover and update handle colors based on highlight state
+            const updateHandleColors = () => {
+                const isHighlightedNow = activeHighlight === detection.id;
+                handlesContainer.querySelectorAll('.resize-handle').forEach(handle => {
+                    handle.style.backgroundColor = isHighlightedNow ? '#ffd54f' : '#9ca3af';
+                });
+            };
+            
+            box.addEventListener('mouseenter', () => {
+                handlesContainer.style.opacity = '1';
+                handlesContainer.style.pointerEvents = 'all';
+                updateHandleColors();
+            });
+            
+            box.addEventListener('mouseleave', () => {
+                if (!isResizing) {
+                    handlesContainer.style.opacity = '0';
+                    handlesContainer.style.pointerEvents = 'none';
+                }
+            });
+            
+            // Update handle colors when highlight changes
+            updateHandleColors();
+            
+            box.appendChild(handlesContainer);
+        }
 
         const label = document.createElement('div');
         label.className = 'label';
-        label.style.backgroundColor = isHighlighted ? '#ffd54f' : classColor.label;
-        const confidence = typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : (detection.confidence === 'Manual' ? 'Manual' : '—');
+        // All highlighted detections use yellow label, otherwise use detection-specific colors
+        if (isHighlighted) {
+            label.style.backgroundColor = '#ffd54f';
+        } else if (detection.manual) {
+            label.style.backgroundColor = '#9ca3af'; // Grey for manual detections
+        } else {
+            const classColor = getColorForClass(detection.class);
+            label.style.backgroundColor = classColor.label;
+        }
+        const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : '—');
         label.textContent = `${detection.class} · ${confidence}`;
 
         box.appendChild(label);
@@ -846,6 +1263,27 @@ const renderDetectionList = (state, area, photo) => {
     }
 };
 
+// Update cursor based on what's being hovered
+const updateCursor = (event) => {
+    const viewerStage = getViewerStage();
+    if (!viewerStage) return;
+    
+    // Check if hovering over a resize handle
+    if (event.target.closest('.resize-handle')) {
+        viewerStage.style.cursor = getResizeCursor(event.target.closest('.resize-handle').dataset.handle);
+        return;
+    }
+    
+    // Check if hovering over a manual detection box
+    if (event.target.closest('.manual-detection')) {
+        viewerStage.style.cursor = 'move';
+        return;
+    }
+    
+    // Default: crosshair for drawing
+    viewerStage.style.cursor = 'crosshair';
+};
+
 const renderViewer = () => {
     const state = readState();
     const area = state.analysis.currentArea || AREAS[0];
@@ -860,6 +1298,12 @@ const renderViewer = () => {
         overlayLayer.innerHTML = '';
         renderDetectionList(state, area);
         return;
+    }
+    
+    // Set default crosshair cursor for drawing
+    const viewerStage = getViewerStage();
+    if (viewerStage) {
+        viewerStage.style.cursor = 'crosshair';
     }
 
     let index = state.analysis.currentPhotoIndex ?? 0;
@@ -983,6 +1427,15 @@ saveDraftBtn?.addEventListener('click', () => {
     alert('Draft saved locally. Submit or export from the Report step to finalize.');
 });
 
+// Add Manual Detection button - provides quick access
+addManualBtn?.addEventListener('click', () => {
+    // Drawing is always enabled, button just provides visual feedback
+    const viewerStage = getViewerStage();
+    if (viewerStage) {
+        viewerStage.focus();
+    }
+});
+
 // Attach drawing handlers as soon as DOM is ready
 const attachDrawingHandlers = () => {
     if (window.__resultsDrawingHandlersAttached) return;
@@ -1008,6 +1461,15 @@ if (document.readyState === 'loading') {
 }
 
 const initialState = ensureTaggingComplete();
+
+// Set default crosshair cursor for drawing (always enabled)
+const viewerStage = getViewerStage();
+if (viewerStage) {
+    viewerStage.style.cursor = 'crosshair';
+    
+    // Update cursor on mouse move to show appropriate cursor
+    viewerStage.addEventListener('mousemove', updateCursor);
+}
 
 if (initialState) {
     if (initialState.analysis.status === 'complete' && initialState.detections.length) {
