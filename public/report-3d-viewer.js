@@ -22,17 +22,6 @@ const SECTION_MASK_MAP = {
     'Horizontal Stabilizer': 'HorizontalStabilizer.png'
 };
 
-// Section colors at 10+ defects (RGB values)
-const SECTION_MAX_COLORS = {
-    'FWD Fuselage': { r: 0, g: 102, b: 76 },      // rgb(0, 102, 76)
-    'MID Fuselage': { r: 25, g: 102, b: 0 },      // rgb(25, 102, 0)
-    'Wings': { r: 0, g: 31, b: 102 },             // rgb(0, 31, 102)
-    'AFT Fuselage': { r: 102, g: 0, b: 0 },        // rgb(102, 0, 0)
-    'Engines': { r: 83, g: 0, b: 102 },            // rgb(83, 0, 102)
-    'Vertical Stabilizer': { r: 102, g: 57, b: 0 }, // rgb(102, 57, 0)
-    'Horizontal Stabilizer': { r: 99, g: 102, b: 0 } // rgb(99, 102, 0)
-};
-
 // Convert hex color to THREE.Color
 const hexToColor = (hex) => {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -41,31 +30,53 @@ const hexToColor = (hex) => {
     return new THREE.Color(r, g, b);
 };
 
-// Calculate heat mapping color based on defect count for a specific section
+// Calculate heat mapping color based on defect count
+// All sections use the same color scheme:
+// >20 defects: red (255, 0, 0)
+// 10 defects: yellow (255, 186, 0)
+// 3 defects: green (70, 255, 58)
+// 0 defects: white (255, 255, 255)
+// Gradient: red -> yellow -> green -> white as defects decrease
 const calculateHeatColor = (defectCount, sectionName) => {
     // All sections start at white (255, 255, 255) for 0 defects
     if (defectCount === 0) {
         return new THREE.Color(1, 1, 1); // White: rgb(255, 255, 255)
     }
     
-    // Get the section's max color (at 10+ defects)
-    const maxColor = SECTION_MAX_COLORS[sectionName];
-    if (!maxColor) {
-        // Fallback to white if section not found
-        return new THREE.Color(1, 1, 1);
+    // Color definitions (RGB 0-255)
+    const red = { r: 255, g: 0, b: 0 };        // >20 defects
+    const yellow = { r: 255, g: 186, b: 0 };   // 10 defects
+    const green = { r: 70, g: 255, b: 58 };    // 3 defects
+    const white = { r: 255, g: 255, b: 255 };  // 0 defects
+    
+    let r, g, b;
+    
+    if (defectCount > 20) {
+        // More than 20 defects: red
+        r = red.r / 255;
+        g = red.g / 255;
+        b = red.b / 255;
+    } else if (defectCount >= 10) {
+        // 10 to 20 defects: gradient from yellow to red
+        const factor = (defectCount - 10) / 10; // 0 at 10 defects, 1 at 20 defects
+        r = (yellow.r + (red.r - yellow.r) * factor) / 255;
+        g = (yellow.g + (red.g - yellow.g) * factor) / 255;
+        b = (yellow.b + (red.b - yellow.b) * factor) / 255;
+    } else if (defectCount >= 3) {
+        // 3 to 10 defects: gradient from green to yellow
+        const factor = (defectCount - 3) / 7; // 0 at 3 defects, 1 at 10 defects
+        r = (green.r + (yellow.r - green.r) * factor) / 255;
+        g = (green.g + (yellow.g - green.g) * factor) / 255;
+        b = (green.b + (yellow.b - green.b) * factor) / 255;
+    } else {
+        // 1 to 3 defects: gradient from white to green
+        const factor = defectCount / 3; // 0 at 0 defects, 1 at 3 defects
+        r = (white.r + (green.r - white.r) * factor) / 255;
+        g = (white.g + (green.g - white.g) * factor) / 255;
+        b = (white.b + (green.b - white.b) * factor) / 255;
     }
     
-    if (defectCount >= 10) {
-        // At 10+ defects, use the section's specific color
-        return new THREE.Color(maxColor.r / 255, maxColor.g / 255, maxColor.b / 255);
-    } else {
-        // Linear interpolation for 1-9 defects between white and section max color
-        const factor = defectCount / 10;
-        const r = (255 - (255 - maxColor.r) * factor) / 255;
-        const g = (255 - (255 - maxColor.g) * factor) / 255;
-        const b = (255 - (255 - maxColor.b) * factor) / 255;
-        return new THREE.Color(r, g, b);
-    }
+    return new THREE.Color(r, g, b);
 };
 
 // Count defects for a specific area, filtering by confidence threshold
@@ -288,22 +299,27 @@ const applyVisualization = async (model, state) => {
                 vec3 base = u_originalBaseColor;
                 ${hasTexture ? `
                 vec4 texColor = texture2D(u_originalTexture, vUv);
-                base = mix(base, texColor.rgb, 0.7);
+                base = texColor.rgb;
                 ` : ''}
                 
                 vec3 finalColor = base;
                 
-                // Apply each section mask - blend heat color only where mask is white
+                // Apply each section mask - replace with heat color where mask is active
                 // White areas (maskValue = 1.0) get full heat color
-                // Black areas (maskValue = 0.0) keep original color
+                // Black areas (maskValue = 0.0) keep original material color
                 // Grayscale areas get smooth interpolation
                 ${validSections.map((_, i) => `
                 {
                     vec4 mask_${i} = texture2D(u_mask_${i}, vUv);
                     float maskValue_${i} = mask_${i}.r;
                     
-                    // Blend heat color based on mask value
-                    finalColor = mix(finalColor, u_heatColor_${i}, maskValue_${i} * u_heatIntensity);
+                    // Check if heat color is white (no defects) - if so, keep original color
+                    vec3 heatColor_${i} = u_heatColor_${i};
+                    float isWhite_${i} = step(0.99, heatColor_${i}.r) * step(0.99, heatColor_${i}.g) * step(0.99, heatColor_${i}.b);
+                    
+                    // Only apply heat color if it's not white (has defects)
+                    // Replace base color with heat color in masked areas
+                    finalColor = mix(finalColor, heatColor_${i}, maskValue_${i} * (1.0 - isWhite_${i}));
                 }
                 `).join('')}
                 
@@ -466,7 +482,7 @@ const initViewer = async () => {
         const width = viewerContainer.clientWidth;
         const height = Math.max(400, viewerContainer.clientHeight || 400);
         camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-        camera.position.set(5, 5, 5);
+        camera.position.set(1,1, 1);
         camera.lookAt(0, 0, 0);
 
         // Set up renderer
@@ -479,8 +495,8 @@ const initViewer = async () => {
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.minDistance = 2;
-        controls.maxDistance = 20;
+        controls.minDistance = 0.5;
+        controls.maxDistance =3
 
         // Add lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
