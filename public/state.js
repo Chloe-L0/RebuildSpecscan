@@ -308,12 +308,15 @@ export const dataURLToFile = (dataURL, fileName, preferredType = 'image/jpeg') =
     return new File([buffer], fileName, { type: mimeType });
 };
 
-export const summarizeDetectionsByArea = (stateSnapshot = readState()) => {
+export const summarizeDetectionsByArea = (stateSnapshot = readState(), options = {}) => {
+    const { threshold } = options;
     const counts = Object.fromEntries(AREAS.map((area) => [area, 0]));
     stateSnapshot.detections.forEach((detection) => {
+        if (detection.falsePositive) return;
+        if (threshold !== undefined && !detection.manual && typeof detection.confidence === 'number' && detection.confidence < threshold) return;
         const photo = stateSnapshot.photos.find((p) => p.id === detection.photoId);
         if (photo?.area && counts.hasOwnProperty(photo.area)) {
-            counts[photo.area] += detection.falsePositive ? 0 : 1;
+            counts[photo.area] += 1;
         }
     });
     return counts;
@@ -368,3 +371,9 @@ export const updateDetectionBbox = (detectionId, bbox) =>
         });
         return draft;
     });
+
+// Keep Netlify function warm: ping /api/health every 4 min (initial + interval), silent errors
+const KEEPALIVE_MS = 4 * 60 * 1000;
+const pingHealth = () => { fetch('/api/health').catch(() => {}); };
+pingHealth();
+setInterval(pingHealth, KEEPALIVE_MS);

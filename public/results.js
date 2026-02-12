@@ -747,7 +747,15 @@ const runAnalysis = async () => {
             });
         }
 
-        const deduped = applyNms(aggregated, 0.5);
+        // Run NMS per photo so counts per image stay correct (don't merge boxes across images)
+        const byPhoto = new Map();
+        for (const det of aggregated) {
+            const id = det.photoId;
+            if (!byPhoto.has(id)) byPhoto.set(id, []);
+            byPhoto.get(id).push(det);
+        }
+        const deduped = [];
+        byPhoto.forEach((dets) => deduped.push(...applyNms(dets, 0.5)));
 
         recordDetections({
             detections: deduped,
@@ -776,7 +784,7 @@ const runAnalysis = async () => {
 };
 
 const renderTabs = (state) => {
-    const counts = summarizeDetectionsByArea(state);
+    const counts = summarizeDetectionsByArea(state, { threshold: state.analysis.threshold });
     const activeArea = state.analysis.currentArea || AREAS[0];
     areaTabs.innerHTML = '';
     AREAS.forEach((area) => {

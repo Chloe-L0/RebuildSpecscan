@@ -84,7 +84,8 @@ const resolvedModelId = modelHasVersion
     : (modelVersion ? `${rawModelId}/${modelVersion}` : rawModelId);
 const ROBOFLOW_MODEL_ID = resolvedModelId;
 const ROBOFLOW_MODEL_VERSION = resolvedModelId.split('/')[1] || 'UNSPECIFIED';
-const ROBOFLOW_API_URL = `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}`;
+// Use Hosted Inference API (detect.roboflow.com) - works with standard private API keys
+const ROBOFLOW_DETECT_URL = `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}`;
 
 // Debug: Log configuration on startup
 console.log('\n Configuration Check:');
@@ -92,6 +93,7 @@ console.log(`   PORT: ${PORT}`);
 console.log(`   API_KEY loaded: ${ROBOFLOW_API_KEY !== 'YOUR_KEY_HERE' ? '✅ Yes' : '❌ No (using placeholder)'}`);
 console.log(`   MODEL_ID loaded: ${ROBOFLOW_MODEL_ID !== 'YOUR_MODEL_ID_HERE' ? '✅ Yes' : '❌ No (using placeholder)'}`);
 console.log(`   MODEL_VERSION: ${ROBOFLOW_MODEL_VERSION}`);
+console.log(`   DETECT_URL: ${ROBOFLOW_DETECT_URL}`);
 console.log(`   .env path: ${ENV_PATH}\n`);
 
 // =======================================
@@ -197,37 +199,40 @@ app.post('/api/analyze', (req, res, next) => {
                     base64Image = base64Image.split(',').pop();
                 }
 
+                const confidencePct = req.body.confidence ?? 60;
+                const overlapPct = req.body.overlap ?? 30;
                 const requestConfig = {
                     params: {
                         api_key: ROBOFLOW_API_KEY,
-                        confidence: req.body.confidence ?? 60,
-                        overlap: req.body.overlap ?? 30
+                        confidence: typeof confidencePct === 'number' ? confidencePct : 60,
+                        overlap: typeof overlapPct === 'number' ? overlapPct : 30
                     },
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     maxContentLength: Infinity,
                     maxBodyLength: Infinity
                 };
 
-                // Call Roboflow API (Hosted Inference expects raw base64 body)
+                // Call Roboflow Hosted Inference API (detect.roboflow.com) - base64 body
                 const response = await axios.post(
-                    ROBOFLOW_API_URL,
+                    ROBOFLOW_DETECT_URL,
                     base64Image,
                     requestConfig
                 );
 
-                // Store results with image index
+                const data = response.data || {};
+                const rawPredictions = data.predictions || [];
+                const imageMeta = data.image || {};
+
                 results.push({
                     imageIndex: i,
                     imageName: file.originalname || `image_${i + 1}.jpg`,
-                    predictions: (response.data.predictions || []).map(p => ({
+                    predictions: rawPredictions.map(p => ({
                         ...p,
                         imageIndex: i,
                         imageName: file.originalname || `image_${i + 1}.jpg`
                     })),
-                    image_width: response.data.image?.width || null,
-                    image_height: response.data.image?.height || null
+                    image_width: imageMeta.width ?? null,
+                    image_height: imageMeta.height ?? null
                 });
             } catch (error) {
                 console.error(`Error processing image ${i + 1}:`, error.message);

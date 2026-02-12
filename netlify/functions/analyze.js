@@ -90,6 +90,8 @@ const parseMultipart = (event) => {
 };
 
 exports.handler = async (event, context) => {
+  const tFunctionStart = Date.now();
+
   // Handle CORS
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -114,17 +116,18 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    // Get environment variables from Netlify
+    // Get environment variables from Netlify (same as server.js)
     const ROBOFLOW_API_KEY = process.env.ROBOFLOW_API_KEY;
     const rawModelId = process.env.ROBOFLOW_MODEL_ID;
     const modelVersion = process.env.ROBOFLOW_MODEL_VERSION;
-    
+
     const modelHasVersion = rawModelId && rawModelId.includes('/');
     const resolvedModelId = modelHasVersion
       ? rawModelId
       : (modelVersion ? `${rawModelId}/${modelVersion}` : rawModelId);
     const ROBOFLOW_MODEL_ID = resolvedModelId;
-    const ROBOFLOW_API_URL = `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}`;
+    // Same endpoint as server.js: Hosted Inference API
+    const ROBOFLOW_DETECT_URL = `https://detect.roboflow.com/${ROBOFLOW_MODEL_ID}`;
 
     // Check API configuration
     if (!ROBOFLOW_API_KEY || !ROBOFLOW_MODEL_ID || ROBOFLOW_API_KEY === 'YOUR_KEY_HERE' || ROBOFLOW_MODEL_ID === 'YOUR_MODEL_ID_HERE') {
@@ -193,14 +196,22 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Process all images
+    const tBeforeApiCalls = Date.now();
+    console.log(`[analyze] Function start → ready for API: ${tBeforeApiCalls - tFunctionStart} ms`);
+
+    // Process all images (same endpoint, format, and headers as server.js)
     const results = [];
-    
+
+    const confidencePct = body.confidence != null ? Number(body.confidence) : 60;
+    const overlapPct = body.overlap != null ? Number(body.overlap) : 30;
+    const confidence = (typeof confidencePct === 'number' && !isNaN(confidencePct)) ? confidencePct : 60;
+    const overlap = (typeof overlapPct === 'number' && !isNaN(overlapPct)) ? overlapPct : 30;
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      
+
       try {
-        // Convert image buffer to base64 string
+        // Convert image buffer to base64 string (without data URL prefix) - same as server.js
         let base64Image = file.buffer.toString('base64');
         if (base64Image.includes(',')) {
           base64Image = base64Image.split(',').pop();
@@ -209,33 +220,37 @@ exports.handler = async (event, context) => {
         const requestConfig = {
           params: {
             api_key: ROBOFLOW_API_KEY,
-            confidence: body.confidence ?? 60,
-            overlap: body.overlap ?? 30
+            confidence,
+            overlap
           },
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          },
+          headers: { 'Content-Type': 'application/json' },
           maxContentLength: Infinity,
           maxBodyLength: Infinity
         };
 
-        // Call Roboflow API
+        const tBeforeRoboflow = Date.now();
         const response = await axios.post(
-          ROBOFLOW_API_URL,
+          ROBOFLOW_DETECT_URL,
           base64Image,
           requestConfig
         );
+        const roboflowMs = Date.now() - tBeforeRoboflow;
+        console.log(`[analyze] Roboflow API call (image ${i + 1}): ${roboflowMs} ms`);
+
+        const data = response.data || {};
+        const rawPredictions = data.predictions || [];
+        const imageMeta = data.image || {};
 
         results.push({
           imageIndex: i,
           imageName: file.originalname || `image_${i + 1}.jpg`,
-          predictions: (response.data.predictions || []).map(p => ({
+          predictions: rawPredictions.map(p => ({
             ...p,
             imageIndex: i,
             imageName: file.originalname || `image_${i + 1}.jpg`
           })),
-          image_width: response.data.image?.width || null,
-          image_height: response.data.image?.height || null
+          image_width: imageMeta.width ?? null,
+          image_height: imageMeta.height ?? null
         });
       } catch (error) {
         console.error(`Error processing image ${i + 1}:`, error.message);
@@ -247,6 +262,9 @@ exports.handler = async (event, context) => {
         });
       }
     }
+
+    const tTotal = Date.now() - tFunctionStart;
+    console.log(`[analyze] Total execution time: ${tTotal} ms`);
 
     // Aggregate all predictions
     const allPredictions = results.flatMap(r => r.predictions || []);
