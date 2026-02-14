@@ -6,54 +6,78 @@
     <title>SpecScan · Capture Photos</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body data-step="3">
-    <header class="app-header">
-        <div class="brand">
-            <span class="badge">SpecScan</span>
-            <h1>Airplane Inspection Console</h1>
-        </div>
-        <div class="step-indicator">
-            <span class="step-label">Step 3 of 7</span>
-            <span class="step-name">Continuous Photo Capture</span>
+<body data-step="3" class="capture-page">
+    <!-- Header -->
+    <header class="capture-header">
+        <div class="header-content">
+            <div class="logo">VERiiO</div>
+            <h1 class="header-title">AIRPLANE INSPECTION CONSOLE</h1>
+            <div class="profile-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+            </div>
         </div>
     </header>
 
-    <main class="shell">
-        <section class="card">
-            <div class="progress-banner" id="progressBanner">
-                <div>
-                    <strong id="aircraftLabel">Tail —</strong>
-                    <div class="muted" id="inspectionMeta"></div>
+    <main class="capture-main">
+        <!-- Main Card with Background Image -->
+        <section class="capture-card">
+            <div class="capture-card-content">
+                <div class="capture-title-section">
+                    <h2 class="capture-title">CAPTURE OR UPLOAD PHOTOS</h2>
+                    <p class="capture-description">Collect a complete view of the airframe. You can mix live captures and library uploads.</p>
                 </div>
-                <div class="pill" id="photoCount">0 Photos</div>
-            </div>
 
-            <div class="toolbar">
-                <div>
-                    <h2>Capture or upload imagery</h2>
-                    <p class="muted">Collect a complete view of the airframe. You can mix live captures and library uploads.</p>
-                </div>
-                <div class="media-actions">
-                    <button class="secondary" id="takePhotoBtn">Take Photo</button>
-                    <button class="primary" id="uploadPhotosBtn">Upload Photos</button>
+                <!-- Upload Area -->
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon-container">
+                        <svg class="upload-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                    </div>
+                    <p class="upload-text">Take a photo or upload from your library.</p>
+                    <p class="upload-formats">JPEG, PNG, PDF, and MP4 formats, up to 50 MB</p>
+                    
+                    <div class="upload-buttons">
+                        <button class="upload-btn take-photo-btn" id="takePhotoBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                <circle cx="12" cy="13" r="4"/>
+                            </svg>
+                            <span>Take Photo</span>
+                        </button>
+                        <button class="upload-btn upload-photo-btn" id="uploadPhotosBtn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                            <span>Upload Photo</span>
+                        </button>
+                    </div>
                     <input type="file" id="fileInput" accept="image/*" hidden multiple>
                 </div>
-            </div>
 
-            <div id="photoContainer">
-                <div class="empty-state" id="emptyState">
-                    <p>No photos captured yet.</p>
-                    <small>Use “Take Photo” for live capture or “Upload Photos” to select multiple images.</small>
+                <!-- Photo Grid (hidden when empty) -->
+                <div class="photo-container" id="photoContainer">
+                    <div class="empty-state" id="emptyState">
+                        <!-- Empty state is handled by upload area above -->
+                    </div>
+                    <div class="media-grid hidden" id="mediaGrid"></div>
                 </div>
-                <div class="media-grid hidden" id="mediaGrid"></div>
             </div>
-
-            <footer class="card-footer">
-                <button class="ghost" id="cancelBtn">Cancel</button>
-                <button class="primary" id="continueBtn" disabled>Continue to Organize</button>
-            </footer>
         </section>
     </main>
+
+    <!-- Footer Navigation -->
+    <footer class="capture-footer">
+        <button class="footer-btn previous-btn" id="cancelBtn">PREVIOUS STEP</button>
+        <button class="footer-btn continue-btn" id="continueBtn" disabled>CONTINUE TO ORGANIZE</button>
+    </footer>
 
     <script type="module" src="state.js"></script>
     <script type="module" src="capture.js"></script>

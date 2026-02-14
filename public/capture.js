@@ -15,9 +15,8 @@ const mediaGrid = document.getElementById('mediaGrid');
 const emptyState = document.getElementById('emptyState');
 const continueBtn = document.getElementById('continueBtn');
 const cancelBtn = document.getElementById('cancelBtn');
-const photoCount = document.getElementById('photoCount');
-const aircraftLabel = document.getElementById('aircraftLabel');
-const inspectionMeta = document.getElementById('inspectionMeta');
+
+let selectedPhotos = new Set();
 
 const ensureInspection = () => {
     const state = readState();
@@ -43,29 +42,41 @@ const fileToDataURL = (file) =>
         reader.readAsDataURL(file);
     });
 
+const uploadArea = document.getElementById('uploadArea');
+
 const renderPhotos = () => {
     const state = readState();
-    aircraftLabel.textContent = `Tail ${state.inspection.tailNumber || '—'}`;
-    inspectionMeta.textContent = formatInspectionMeta(state);
     const count = state.photos.length;
-    photoCount.textContent = count === 1 ? '1 Photo' : `${count} Photos`;
 
     if (!count) {
-        emptyState.classList.remove('hidden');
-        mediaGrid.classList.add('hidden');
-        continueBtn.disabled = true;
-        mediaGrid.innerHTML = '';
+        // Show upload area, hide grid
+        if (uploadArea) uploadArea.style.display = 'flex';
+        if (emptyState) emptyState.classList.remove('hidden');
+        if (mediaGrid) {
+            mediaGrid.classList.add('hidden');
+            mediaGrid.innerHTML = '';
+        }
+        if (continueBtn) continueBtn.disabled = true;
         return;
     }
 
-    emptyState.classList.add('hidden');
-    mediaGrid.classList.remove('hidden');
-    continueBtn.disabled = false;
-    mediaGrid.innerHTML = '';
+    // Hide upload area, show grid
+    if (uploadArea) uploadArea.style.display = 'none';
+    if (emptyState) emptyState.classList.add('hidden');
+    if (mediaGrid) {
+        mediaGrid.classList.remove('hidden');
+        mediaGrid.innerHTML = '';
+    }
+    if (continueBtn) continueBtn.disabled = false;
 
-    state.photos.forEach((photo) => {
+    state.photos.forEach((photo, index) => {
         const tile = document.createElement('div');
         tile.className = 'photo-tile';
+        if (selectedPhotos.has(photo.id)) {
+            tile.classList.add('selected');
+        }
+        tile.style.position = 'relative';
+        tile.dataset.photoId = photo.id;
 
         const thumb = document.createElement('img');
         thumb.className = 'photo-thumb';
@@ -74,7 +85,7 @@ const renderPhotos = () => {
 
         const meta = document.createElement('div');
         meta.className = 'photo-meta';
-        meta.innerHTML = `<span>Photo #${photo.number}</span><span class="muted">${photo.name}</span>`;
+        meta.innerHTML = `<span>Photo #${photo.number}</span><span style="color: #676767;">${photo.name}</span>`;
 
         const foot = document.createElement('div');
         foot.className = 'photo-actions';
@@ -90,7 +101,7 @@ const renderPhotos = () => {
             areaChip.style.color = colors.text;
         }
         const size = document.createElement('span');
-        size.className = 'muted';
+        size.style.color = '#676767';
         size.textContent = 'Tap to tag next step';
         foot.append(areaChip, size);
 
@@ -99,14 +110,36 @@ const renderPhotos = () => {
         remove.className = 'remove';
         remove.innerHTML = '&times;';
         remove.title = 'Remove photo';
-        remove.addEventListener('click', () => {
+        remove.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectedPhotos.delete(photo.id);
             removePhotoFromState(photo.id);
+            renderPhotos();
+        });
+
+        tile.addEventListener('click', (e) => {
+            if (e.target === remove || e.target.closest('.remove')) return;
+            if (selectedPhotos.has(photo.id)) {
+                selectedPhotos.delete(photo.id);
+            } else {
+                selectedPhotos.add(photo.id);
+            }
             renderPhotos();
         });
 
         tile.append(thumb, meta, foot, remove);
         mediaGrid.appendChild(tile);
     });
+
+    // Always add plus icon after the last photo
+    const addIcon = document.createElement('div');
+    addIcon.className = 'add-photo-icon';
+    addIcon.innerHTML = '+';
+    addIcon.title = 'Add more photos';
+    addIcon.addEventListener('click', () => {
+        uploadPhotosBtn?.click();
+    });
+    mediaGrid.appendChild(addIcon);
 };
 
 const processFiles = async (files) => {

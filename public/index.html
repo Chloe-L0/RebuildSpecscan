@@ -6,65 +6,146 @@
     <title>SpecScan · Start Inspection</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body data-step="1">
-    <header class="app-header">
-        <div class="brand">
-            <span class="badge">SpecScan</span>
-            <h1>Airplane Inspection Console</h1>
-        </div>
-        <div class="step-indicator">
-            <span class="step-label">Step 1 of 7</span>
-            <span class="step-name">Start Inspection</span>
-        </div> 
-    </header>
+<body data-step="1" class="new-ui">
+    <!-- Vertical Sidebar Navigation -->
+    <nav class="sidebar-nav">
+        <button class="nav-icon" title="Info">
+            <span class="icon-text">ii</span>
+        </button>
+        <button class="nav-icon" title="Clipboard">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
+            </svg>
+        </button>
+        <button class="nav-icon" title="Clock">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+            </svg>
+        </button>
+        <button class="nav-icon" title="Bookmark">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+        </button>
+        <button class="nav-icon" title="Messages">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+        </button>
+        <button class="nav-icon nav-back" title="Back">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+        </button>
+    </nav>
 
-    <main class="shell">
-        <section class="card start-card">
-            <header class="card-header">
-                <h2>Inspection Details</h2>
-                <p>Provide the basics so we can stamp the report and segment analysis by airframe.</p>
-            </header>
-            <form class="form-grid" id="startForm">
-                <label class="form-field">
-                    <span class="form-label">Tail Number</span>
-                    <input type="text" id="tailNumber" name="tailNumber" maxlength="10" required placeholder="e.g. N12345">
-                </label>
+    <div class="main-container">
+        <!-- Progress Bar Header -->
+        <header class="progress-header">
+            <div class="progress-steps">
+                <div class="progress-step active">
+                    <div class="step-circle">1</div>
+                    <span class="step-text">DETAILS</span>
+                </div>
+                <div class="progress-step">
+                    <div class="step-circle">2</div>
+                    <span class="step-text">SUBMIT PHOTOS</span>
+                </div>
+                <div class="progress-step">
+                    <div class="step-circle">3</div>
+                    <span class="step-text">TAGGING</span>
+                </div>
+                <div class="progress-step">
+                    <div class="step-circle">4</div>
+                    <span class="step-text">VERIFICATION</span>
+                </div>
+                <div class="progress-step">
+                    <div class="step-circle">5</div>
+                    <span class="step-text">REVIEW</span>
+                </div>
+                <div class="progress-step">
+                    <div class="step-circle">6</div>
+                    <span class="step-text">EXPORT</span>
+                </div>
+            </div>
+            <div class="progress-line"></div>
+        </header>
 
-                <fieldset class="form-field">
-                    <legend class="form-label">Inspection Type</legend>
-                    <div class="radio-group">
-                        <label class="radio">
-                            <input type="radio" name="inspectionType" value="Inbound" checked>
-                            <span>Inbound</span>
+        <!-- Main Content Area -->
+        <main class="content-area">
+            <!-- Title Section -->
+            <div class="title-section">
+                <h1 class="page-title">INSPECTION DETAILS</h1>
+                <div class="time-started">
+                    <span class="time-label">TIME STARTED</span>
+                    <span class="time-value" id="timeStartedDisplay">Jan 24, 2026, 9:46 PM</span>
+                </div>
+            </div>
+
+            <!-- Two Card Layout -->
+            <div class="cards-container">
+                <!-- Left Card: AIRCRAFT -->
+                <div class="info-card aircraft-card">
+                    <h2 class="card-title">AIRCRAFT</h2>
+                    <form id="startForm">
+                        <label class="form-field">
+                            <span class="form-label">TAIL NUMBER</span>
+                            <input type="text" id="tailNumber" name="tailNumber" maxlength="10" required placeholder="e.g. N12345">
                         </label>
-                        <label class="radio">
-                            <input type="radio" name="inspectionType" value="Outbound">
-                            <span>Outbound</span>
+
+                        <fieldset class="form-field">
+                            <legend class="form-label">INSPECTION TYPE</legend>
+                            <div class="toggle-group">
+                                <label class="toggle-button">
+                                    <input type="radio" name="inspectionType" value="Inbound">
+                                    <span>Inbound</span>
+                                </label>
+                                <label class="toggle-button active">
+                                    <input type="radio" name="inspectionType" value="Outbound" checked>
+                                    <span>Outbound</span>
+                                </label>
+                            </div>
+                        </fieldset>
+                    </form>
+                </div>
+
+                <!-- Right Card: INSPECTOR -->
+                <div class="info-card inspector-card">
+                    <h2 class="card-title">INSPECTOR</h2>
+                    <form>
+                        <label class="form-field">
+                            <span class="form-label">DEPARTMENT</span>
+                            <div class="select-wrapper">
+                                <select id="department" name="department">
+                                    <option value="">e.g. Maintenance QA</option>
+                                    <option value="Maintenance QA">Maintenance QA</option>
+                                    <option value="Quality Control">Quality Control</option>
+                                    <option value="Operations">Operations</option>
+                                </select>
+                                <svg class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                </svg>
+                            </div>
                         </label>
-                    </div>
-                </fieldset>
 
-                <label class="form-field">
-                    <span class="form-label">Department</span>
-                    <input type="text" id="department" name="department" placeholder="e.g. Maintenance QA">
-                </label>
+                        <label class="form-field">
+                            <span class="form-label">INSPECTOR NAME</span>
+                            <div class="input-wrapper">
+                                <input type="text" id="inspectorName" name="inspectorName" required placeholder="Your Name">
+                                <span class="verified-icon">✓</span>
+                            </div>
+                        </label>
+                    </form>
+                </div>
+            </div>
 
-                <label class="form-field">
-                    <span class="form-label">Inspector Name</span>
-                    <input type="text" id="inspectorName" name="inspectorName" required placeholder="Your name">
-                </label>
-
-                <label class="form-field">
-                    <span class="form-label">Started At</span>
-                    <input type="text" id="startedAt" name="startedAt" readonly>
-                </label>
-            </form>
-
-            <footer class="card-footer">
-                <button type="button" class="primary" id="startCaptureBtn">Start Photo Capture</button>
-            </footer>
-        </section>
-    </main>
+            <!-- Action Button -->
+            <div class="action-footer">
+                <button type="button" class="primary-btn" id="startCaptureBtn">START PHOTO CAPTURE</button>
+            </div>
+        </main>
+    </div>
 
     <script type="module" src="state.js"></script>
     <script type="module" src="start.js"></script>

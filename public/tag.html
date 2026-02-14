@@ -8,78 +8,72 @@
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
 <body data-step="4">
-    <header class="app-header">
-        <div class="brand">
-            <span class="badge">SpecScan</span>
-            <h1>Airplane Inspection Console</h1>
-        </div>
-        <div class="step-indicator">
-            <span class="step-label">Step 4 of 7</span>
-            <span class="step-name">Tag Photos</span>
+    <!-- Header -->
+    <header class="capture-header">
+        <div class="header-content">
+            <div class="logo">VERiiO</div>
+            <h1 class="header-title">AIRPLANE INSPECTION CONSOLE</h1>
+            <div class="profile-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+            </div>
         </div>
     </header>
 
-    <main class="shell">
-        <section class="card">
-            <div class="progress-banner">
-                <div>
-                    <strong id="tagProgress">0 of 0 photos tagged</strong>
-                    <div class="muted" id="tagSummary"></div>
+    <main class="shell tag-page">
+        <section class="card tag-card">
+            <div class="tag-header">
+                <div class="tag-title-section">
+                    <h2 class="tag-title">TAG YOUR PHOTOS</h2>
+                    <p class="tag-subtitle">Link your photos to the location they are found on the aircraft.</p>
                 </div>
-                <div class="pill">Tag &amp; Organize</div>
             </div>
 
-            <div class="info-banner">
-                <strong>Pro tip:</strong>
-                <span>Select photos, then assign their inspection area. “Select All” only chooses untagged photos to speed up workflow.</span>
-            </div>
-
-            <div class="grid-split">
-                <aside class="sticky-selector">
-                    <div class="area-selector">
-                        <div class="muted">Selection</div>
-                        <div class="button-row">
-                            <button class="secondary" id="selectAllBtn">Select All Untagged</button>
-                            <button class="ghost" id="clearSelectionBtn">Clear Selection</button>
-                        </div>
-                        <div class="muted" id="selectionMeta">0 photos selected</div>
-                        <hr>
-                        <div class="muted">Assign Area</div>
-                        <div class="hotspot-toolbar" id="hotspotToolbar">
-                            <button type="button" class="area-hotspot" data-area="FWD Fuselage">FWD Fuselage</button>
-                            <button type="button" class="area-hotspot" data-area="MID Fuselage">MID Fuselage</button>
-                            <button type="button" class="area-hotspot" data-area="Wings">Wings</button>
-                            <button type="button" class="area-hotspot" data-area="AFT Fuselage">AFT Fuselage</button>
-                            <button type="button" class="area-hotspot" data-area="Engines">Engines</button>
-                            <button type="button" class="area-hotspot" data-area="Vertical Stabilizer">Vertical Stabilizer</button>
-                            <button type="button" class="area-hotspot" data-area="Horizontal Stabilizer">Horizontal Stabilizer</button>
-                        </div>
-                        <div id="viewerShell" class="viewer-shell">
-                            <model-viewer
-                                id="areaViewer"
-                                class="plane-viewer area-viewer"
-                                src="/assets/plane.glb"
-                                camera-controls
-                                interaction-prompt="none"
-                                auto-rotate="false"
-                                exposure="1.0"
-                                shadow-intensity="0.25"
-                                camera-orbit="45deg 75deg 10m"
-                                min-camera-orbit="auto 35deg 100m"
-                                max-camera-orbit="auto 100deg 130m"
-                                field-of-view="5deg"
-                                interpolation-decay="20"
-                                tone-mapping="neutral"
-                                ar="false">
-                            </model-viewer>
-                            <div id="hotspotLayer" class="overlay-layer" dir="ltr"></div>
-                        </div>
-                        <small class="muted area-hint">Click a hotspot to assign the selected photos.</small>
-                        <button class="ghost" id="clearTagsBtn">Remove Area Tags</button>
+            <div class="tag-content-grid">
+                <aside class="tag-assign-area">
+                    <h3 class="tag-section-title">ASSIGN AREA</h3>
+                    <div class="hotspot-toolbar" id="hotspotToolbar">
+                        <button type="button" class="area-hotspot" data-area="FWD Fuselage">FWD Fuselage</button>
+                        <button type="button" class="area-hotspot" data-area="MID Fuselage">MID Fuselage</button>
+                        <button type="button" class="area-hotspot" data-area="Wings">Wings</button>
+                        <button type="button" class="area-hotspot" data-area="AFT Fuselage">AFT Fuselage</button>
+                        <button type="button" class="area-hotspot" data-area="Engines">Engines</button>
+                        <button type="button" class="area-hotspot" data-area="Vertical Stabilizer">Vertical Stabilizer</button>
+                        <button type="button" class="area-hotspot" data-area="Horizontal Stabilizer">Horizontal Stabilizer</button>
+                    </div>
+                    <div class="tag-selection-controls">
+                        <button class="tag-select-btn" id="selectAllBtn">Select all Untagged</button>
+                        <button class="tag-clear-btn" id="clearSelectionBtn">Clear Selection</button>
+                        <div class="tag-photo-count" id="selectionMeta">0 photos detected</div>
+                    </div>
+                    <div id="viewerShell" class="viewer-shell tag-viewer">
+                        <model-viewer
+                            id="areaViewer"
+                            class="plane-viewer area-viewer"
+                            src="/assets/plane.glb"
+                            camera-controls
+                            interaction-prompt="none"
+                            auto-rotate="false"
+                            exposure="1.0"
+                            shadow-intensity="0.25"
+                            camera-orbit="45deg 75deg 10m"
+                            min-camera-orbit="auto 35deg 100m"
+                            max-camera-orbit="auto 100deg 130m"
+                            field-of-view="5deg"
+                            interpolation-decay="20"
+                            tone-mapping="neutral"
+                            ar="false">
+                        </model-viewer>
+                        <div id="hotspotLayer" class="overlay-layer" dir="ltr"></div>
                     </div>
                 </aside>
 
-                <div>
+                <div class="tag-image-bank">
+                    <div class="tag-image-bank-header">
+                        <h3 class="tag-section-title">IMAGE BANK</h3>
+                    </div>
                     <div class="select-grid" id="tagGrid"></div>
                     <div class="empty-state hidden" id="emptyTagState">
                         <p>No photos available.</p>
@@ -88,9 +82,9 @@
                 </div>
             </div>
 
-            <footer class="card-footer">
-                <button class="secondary" id="backBtn">Back to Capture</button>
-                <button class="primary" id="nextBtn" disabled>Next</button>
+            <footer class="tag-footer">
+                <button class="tag-back-btn" id="backBtn">PREVIOUS STEP</button>
+                <button class="tag-continue-btn" id="nextBtn" disabled>CONTINUE TO ORGANIZE</button>
             </footer>
         </section>
     </main>

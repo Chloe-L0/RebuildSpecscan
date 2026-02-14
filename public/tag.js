@@ -39,9 +39,10 @@ const updateProgress = () => {
 };
 
 const updateSelectionMeta = () => {
+    const state = readState();
+    const total = state.photos.length;
     const count = selected.size;
-    selectionMeta.textContent =
-        count === 0 ? '0 photos selected' : `${count} photo${count === 1 ? '' : 's'} selected`;
+    selectionMeta.textContent = `${total} photo${total === 1 ? '' : 's'} detected`;
     const disableActions = count === 0;
     if (clearTagsBtn) clearTagsBtn.disabled = disableActions;
     if (clearSelectionBtn) clearSelectionBtn.disabled = disableActions;
@@ -53,21 +54,26 @@ const setActiveHotspots = (area) => {
         button.classList.toggle('active', isActive);
         button.setAttribute('aria-pressed', String(isActive));
         
-        // Apply area-specific colors
+        // Apply area-specific colors only when not active
         const buttonArea = button.dataset.area;
-        if (buttonArea) {
+        if (buttonArea && !isActive) {
             const colors = getAreaColor(buttonArea);
-            if (isActive) {
-                button.style.backgroundColor = colors.primary;
-                button.style.borderColor = colors.primary;
-                button.style.color = '#ffffff';
-                button.style.boxShadow = `0 8px 20px ${colors.primary}40`;
-            } else {
-                button.style.backgroundColor = colors.light;
-                button.style.borderColor = colors.border;
-                button.style.color = colors.text;
-                button.style.boxShadow = '0 2px 8px rgba(16, 18, 26, 0.08)';
-            }
+            button.style.backgroundColor = colors.light;
+            button.style.borderColor = colors.border;
+            button.style.color = colors.text;
+            button.style.boxShadow = '0 2px 8px rgba(16, 18, 26, 0.08)';
+        } else if (!isActive) {
+            // Reset to default when not active
+            button.style.backgroundColor = '#f4f5f5';
+            button.style.borderColor = 'rgba(16, 18, 26, 0.15)';
+            button.style.color = '#10121a';
+            button.style.boxShadow = 'none';
+        } else {
+            // Clear inline styles when active to let CSS handle it
+            button.style.backgroundColor = '';
+            button.style.borderColor = '';
+            button.style.color = '';
+            button.style.boxShadow = '';
         }
     });
 };
@@ -89,9 +95,12 @@ const setupHotspotHovers = () => {
             
             button.addEventListener('mouseleave', () => {
                 if (!button.classList.contains('active')) {
-                    button.style.backgroundColor = colors.light;
-                    button.style.borderColor = colors.border;
-                    button.style.color = colors.text;
+                    const isActive = button.classList.contains('active');
+                    if (!isActive) {
+                        button.style.backgroundColor = colors.light;
+                        button.style.borderColor = colors.border;
+                        button.style.color = colors.text;
+                    }
                 }
             });
         }
@@ -115,50 +124,60 @@ const toggleSelection = (photoId, forceState) => {
 };
 
 const createPhotoCard = (photo) => {
-    const card = document.createElement('label');
+    const card = document.createElement('div');
     card.className = 'select-card';
     if (selected.has(photo.id)) {
         card.classList.add('selected');
     }
     if (photo.area) {
         card.classList.add('tagged');
-        // Apply area-specific color
-        const colors = getAreaColor(photo.area);
-        card.style.backgroundColor = colors.light;
-        card.style.borderColor = colors.border;
     }
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'select-checkbox';
-    checkbox.checked = selected.has(photo.id);
-    checkbox.addEventListener('change', (event) => {
-        toggleSelection(photo.id, event.target.checked);
-        event.stopPropagation();
-    });
 
     const thumb = document.createElement('img');
     thumb.className = 'photo-thumb';
     thumb.src = photo.dataURL;
     thumb.alt = photo.name;
 
-    const areaBadge = document.createElement('span');
-    areaBadge.className = 'area-badge';
-    areaBadge.textContent = photo.area ? `Tagged: ${photo.area}` : 'Area not assigned';
+    const footer = document.createElement('footer');
+    const photoNumber = document.createElement('span');
+    photoNumber.textContent = `Photo #${photo.number}`;
+    const fileName = document.createElement('span');
+    fileName.textContent = photo.name;
+    footer.appendChild(photoNumber);
+    footer.appendChild(fileName);
+
+    // Add tag badge or + button
+    let addBtn = null;
     if (photo.area) {
+        const areaBadge = document.createElement('span');
+        areaBadge.className = 'area-badge';
+        areaBadge.textContent = photo.area;
         const colors = getAreaColor(photo.area);
+        areaBadge.style.backgroundColor = colors.light;
+        areaBadge.style.borderColor = colors.border;
         areaBadge.style.color = colors.text;
-        areaBadge.style.fontWeight = '600';
+        footer.appendChild(areaBadge);
+    } else {
+        addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'tag-add-btn';
+        addBtn.innerHTML = '+';
+        addBtn.title = 'Add tag';
+        addBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            toggleSelection(photo.id);
+        });
+        footer.appendChild(addBtn);
     }
 
-    const footer = document.createElement('footer');
-    footer.innerHTML = `<span class="muted">${photo.name}</span><span>Photo #${photo.number}</span>`;
-
-    card.append(checkbox, thumb, areaBadge, footer);
-    card.addEventListener('click', (event) => {
-        if (event.target === checkbox) return;
+    card.append(thumb, footer);
+    
+    // Add click handler for card selection
+    const handleCardClick = (event) => {
+        if (addBtn && (event.target === addBtn || event.target.closest('.tag-add-btn'))) return;
         toggleSelection(photo.id);
-    });
+    };
+    card.addEventListener('click', handleCardClick);
 
     return card;
 };
@@ -256,7 +275,7 @@ nextBtn?.addEventListener('click', () => {
 const initializeHotspotColors = () => {
     hotspotButtons.forEach((button) => {
         const buttonArea = button.dataset.area;
-        if (buttonArea) {
+        if (buttonArea && !button.classList.contains('active')) {
             const colors = getAreaColor(buttonArea);
             button.style.backgroundColor = colors.light;
             button.style.borderColor = colors.border;
