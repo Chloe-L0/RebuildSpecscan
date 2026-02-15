@@ -7,83 +7,77 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body data-step="6">
-    <header class="app-header">
-        <div class="brand">
-            <span class="badge">SpecScan</span>
-            <h1>Airplane Inspection Console</h1>
-        </div>
-        <div class="step-indicator">
-            <span class="step-label">Step 6 of 7</span>
-            <span class="step-name">Final Report</span>
+    <!-- Header -->
+    <header class="capture-header">
+        <div class="header-content">
+            <div class="logo">SPECSCAN</div>
+            <h1 class="header-title">AIRPLANE INSPECTION CONSOLE</h1>
+            <div class="profile-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+            </div>
         </div>
     </header>
 
-    <main class="shell">
-        <section class="card">
-            <div class="progress-banner">
-                <div>
-                    <strong>Review findings before export</strong>
-                    <div class="muted" id="reportSummaryMeta"></div>
-                </div>
-                <div class="pill">Report Assembly</div>
+    <main class="shell report-page">
+        <section class="card report-card">
+            <div class="report-header">
+                <h2 class="report-title">REVIEW FINDINGS BEFORE EXPORT</h2>
+                <p class="report-subtitle" id="reportSummaryMeta">captionn</p>
             </div>
 
-            <div class="report-grid">
-                <article class="summary-card">
-                    <h3>Total Photos</h3>
-                    <div class="summary-stat" id="totalPhotos">--</div>
-                    <p class="muted">Captured and tagged across all areas.</p>
-                </article>
-                <article class="summary-card">
-                    <h3>Detections</h3>
-                    <div class="summary-stat" id="totalDetections">--</div>
-                    <p class="muted">Filtered by confidence and false-positive status.</p>
-                </article>
-                <article class="summary-card">
-                    <h3>Areas Inspected</h3>
-                    <div class="summary-stat" id="areasInspected">--</div>
-                    <p class="muted">Distinct airframe zones covered in this session.</p>
-                </article>
-            </div>
-
-            <div class="report-preview">
-                <h3>Export Preferences</h3>
-                <label class="toggle">
-                    <input type="checkbox" id="thumbnailToggle" checked>
-                    <span>Include defect thumbnails in PDF export</span>
-                </label>
-                <label class="toggle">
-                    <input type="checkbox" id="falsePositiveToggle">
-                    <span>Include detections flagged as false positives</span>
-                </label>
-                <label class="toggle">
-                    <input type="checkbox" id="allPhotosToggle" checked>
-                    <span>Include all captured photos in appendix</span>
-                </label>
-
-                <div class="info-banner">
-                    <strong>Preview</strong>
-                    <span>This step configures the report. Export and submission are triggered from the actions below.</span>
+            <div class="report-main-layout">
+                <!-- Left Side: 3D Viewer -->
+                <div class="report-image-section">
+                    <div class="report-image-container" id="report3DViewer">
+                        <!-- 3D viewer will be rendered here -->
+                    </div>
                 </div>
 
-                <div class="muted" id="reportPreviewDetail"></div>
+                <!-- Right Side: Summary Boxes -->
+                <div class="report-summary-section">
+                    <article class="report-summary-box">
+                        <h3 class="summary-box-title">AREAS INSPECTED</h3>
+                        <div class="summary-box-value" id="areasInspected">1</div>
+                        <p class="summary-box-desc">Distinct airframe in this session</p>
+                    </article>
+                    <article class="report-summary-box">
+                        <h3 class="summary-box-title">TOTAL PHOTOS</h3>
+                        <div class="summary-box-value" id="totalPhotos">2</div>
+                        <p class="summary-box-desc">Captured and Tagged Across All Areas</p>
+                    </article>
+                    <article class="report-summary-box">
+                        <h3 class="summary-box-title">DETECTIONS</h3>
+                        <div class="summary-box-value" id="totalDetections">1</div>
+                        <p class="summary-box-desc">Filtered by confidence and false-positive status.</p>
+                    </article>
+                </div>
             </div>
 
-            <div class="report-3d-viewer">
-                <h3>3D Visualization</h3>
-                <div class="info-banner">
-                    <strong>Interactive Model</strong>
-                    <span>Engines section colored by defect count. White = 0 defects, Red = 10+ defects.</span>
+            <!-- Export Preferences -->
+            <div class="report-preferences">
+                <h3 class="preferences-title">EXPORT PREFERENCES</h3>
+                <div class="preferences-options">
+                    <label class="radio-option">
+                        <input type="checkbox" id="thumbnailToggle" checked>
+                        <span>Include defect thumbnails in PDF export</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="checkbox" id="falsePositiveToggle">
+                        <span>Include detections flagged as false positives</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="checkbox" id="allPhotosToggle" checked>
+                        <span>Include all captured photos in appendix</span>
+                    </label>
                 </div>
-                <div id="report3DViewer" class="report-3d-container"></div>
             </div>
 
-            <footer class="card-footer">
-                <div class="button-row">
-                    <button class="secondary" id="backToResultsBtn">Back to Results</button>
-                    <button class="ghost" id="downloadReportBtn">Download Report (PDF)</button>
-                </div>
-                <button class="primary" id="submitInspectionBtn">Submit Inspection</button>
+            <footer class="report-footer">
+                <button class="report-back-btn" id="backToResultsBtn">PREVIOUS STEP</button>
+                <button class="report-submit-btn" id="submitInspectionBtn">SUBMIT INSPECTION</button>
             </footer>
         </section>
     </main>

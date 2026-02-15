@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const viewerContainer = document.getElementById('report3DViewer');
+let viewerContainer = null;
 
 // Global state for 3D viewer
 let scene, camera, renderer, controls, model, sectionTextures = {}, modelBounds = null;
@@ -479,8 +479,14 @@ const initViewer = async () => {
         scene.background = new THREE.Color(0xf5f5f5);
 
         // Set up camera
-        const width = viewerContainer.clientWidth;
-        const height = Math.max(400, viewerContainer.clientHeight || 400);
+        const width = viewerContainer.clientWidth || 500;
+        const height = Math.max(400, viewerContainer.clientHeight || 500);
+        
+        if (width === 0 || height === 0) {
+            console.warn('3D Viewer container has zero dimensions, using defaults');
+        }
+        
+        console.log('3D Viewer dimensions:', width, 'x', height);
         camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
         camera.position.set(1,1, 1);
         camera.lookAt(0, 0, 0);
@@ -489,14 +495,21 @@ const initViewer = async () => {
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(width, height);
         renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.domElement.style.display = 'block';
+        renderer.domElement.style.width = '100%';
+        renderer.domElement.style.height = '100%';
+        viewerContainer.innerHTML = ''; // Clear any existing content
         viewerContainer.appendChild(renderer.domElement);
+        
+        // Show loading state
+        console.log('3D Viewer renderer created and added to container');
 
         // Set up controls
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         controls.minDistance = 0.5;
-        controls.maxDistance =3
+        controls.maxDistance = 3;
 
         // Add lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -525,13 +538,14 @@ const initViewer = async () => {
         // Add model to scene
         scene.add(model);
 
-        // Start animation loop
+        // Start animation loop - render immediately even before model loads
         const animate = () => {
             animationFrameId = requestAnimationFrame(animate);
             controls.update();
             renderer.render(scene, camera);
         };
         animate();
+        console.log('3D Viewer animation loop started, viewer ready:', viewerReady);
         
         viewerReady = true;
 
@@ -588,15 +602,31 @@ const cleanup = () => {
 };
 
 // Initialize when DOM is ready
-if (viewerContainer) {
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initViewer);
+const initializeViewer = () => {
+    viewerContainer = document.getElementById('report3DViewer');
+    if (viewerContainer) {
+        console.log('3D Viewer container found, initializing...', viewerContainer);
+        // Small delay to ensure container has dimensions
+        setTimeout(() => {
+            initViewer().catch((error) => {
+                console.error('Error initializing 3D viewer:', error);
+                if (viewerContainer) {
+                    viewerContainer.innerHTML = '<p style="padding: 20px; color: #676767;">Failed to load 3D visualization. Please check console for errors.</p>';
+                }
+            });
+        }, 100);
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', cleanup);
     } else {
-        initViewer();
+        console.error('3D Viewer container not found: #report3DViewer');
     }
+};
 
-    // Cleanup on page unload
-    window.addEventListener('beforeunload', cleanup);
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeViewer);
+} else {
+    // If DOM is already loaded, wait a bit more to ensure all scripts are ready
+    setTimeout(initializeViewer, 50);
 }
 
 // Export function for PDF generation

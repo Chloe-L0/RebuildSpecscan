@@ -40,7 +40,6 @@ const allPhotosToggle = document.getElementById('allPhotosToggle');
 const backToResultsBtn = document.getElementById('backToResultsBtn');
 const downloadReportBtn = document.getElementById('downloadReportBtn');
 const submitInspectionBtn = document.getElementById('submitInspectionBtn');
-const reportPreviewDetail = document.getElementById('reportPreviewDetail');
 
 const ensureAnalysisComplete = () => {
     const state = readState();
@@ -84,21 +83,30 @@ const renderSummary = () => {
     const inspectedAreas = new Set(tagged.map((photo) => photo.area));
     const detectionCount = computeDetectionTotals(state, state.report.includeFalsePositives);
 
-    reportSummaryMeta.textContent = formatMeta(state);
-    totalPhotosEl.textContent = tagged.length.toString();
-    totalDetectionsEl.textContent = detectionCount.toString();
-    areasInspectedEl.textContent = inspectedAreas.size.toString();
+    if (reportSummaryMeta) {
+        reportSummaryMeta.textContent = formatMeta(state);
+    }
+    if (totalPhotosEl) {
+        totalPhotosEl.textContent = tagged.length.toString();
+    }
+    if (totalDetectionsEl) {
+        totalDetectionsEl.textContent = detectionCount.toString();
+    }
+    if (areasInspectedEl) {
+        areasInspectedEl.textContent = inspectedAreas.size.toString();
+    }
 
-    const counts = summarizeDetectionsByArea(state);
-    const areaDetails = AREAS.filter((area) => inspectedAreas.has(area))
-        .map((area) => `${area} (${counts[area] || 0})`)
-        .join(', ');
+    // Update toggles
+    if (thumbnailToggle) {
+        thumbnailToggle.checked = state.report.includeThumbnails;
+    }
+    if (falsePositiveToggle) {
+        falsePositiveToggle.checked = state.report.includeFalsePositives;
+    }
+    if (allPhotosToggle) {
+        allPhotosToggle.checked = state.report.includeAllPhotos;
+    }
 
-    reportPreviewDetail.textContent = `Export will include ${detectionCount} detection${detectionCount === 1 ? '' : 's'} across ${inspectedAreas.size} area${inspectedAreas.size === 1 ? '' : 's'}: ${areaDetails || 'None'}. Options – Thumbnails: ${state.report.includeThumbnails ? 'ON' : 'OFF'}, False positives: ${state.report.includeFalsePositives ? 'ON' : 'OFF'}, All photos: ${state.report.includeAllPhotos ? 'ON' : 'OFF'}.`;
-
-    thumbnailToggle.checked = state.report.includeThumbnails;
-    falsePositiveToggle.checked = state.report.includeFalsePositives;
-    allPhotosToggle.checked = state.report.includeAllPhotos;
 };
 
 const filterIncludedDetections = (state) => {
