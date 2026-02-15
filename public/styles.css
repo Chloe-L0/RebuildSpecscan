@@ -2165,16 +2165,29 @@ body[data-step="4"] .capture-header {
     background: transparent;
     color: #676767;
     border: none;
+    border-radius: 8px;
     padding: 8px 12px;
     font-size: 14px;
     cursor: pointer;
-    transition: color 0.2s ease;
+    transition: all 0.2s ease;
     width: 100%;
     text-align: left;
 }
 
-.tag-assign-area .tag-clear-btn:hover {
+.tag-assign-area .tag-clear-btn:hover:not(:disabled) {
     color: #10121a;
+}
+
+.tag-assign-area .tag-clear-btn:active:not(:disabled),
+.tag-assign-area .tag-clear-btn:focus:not(:disabled) {
+    border: 1px solid #858585;
+    outline: none;
+}
+
+.tag-assign-area .tag-clear-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .tag-assign-area .tag-photo-count {
@@ -2257,8 +2270,8 @@ body[data-step="4"] .capture-header {
     justify-content: center;
     padding: 12px 24px;
     border-radius: 50px;
-    border: 1px solid rgba(16, 18, 26, 0.15);
-    background: #f4f5f5;
+    border: 1px solid #858585;
+    background: #ffffff;
     color: #10121a;
     font-size: 14px;
     font-weight: 600;
@@ -2353,6 +2366,21 @@ body[data-step="4"] .capture-header {
 .tag-content-grid .select-card footer .tag-add-btn {
     margin-top: 4px;
     align-self: flex-start;
+}
+
+.tag-content-grid .area-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 50px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+    border: 1px solid #2d5016;
+    background: #2d5016;
+    color: #ffffff;
 }
 
 .tag-content-grid .area-badge {

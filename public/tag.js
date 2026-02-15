@@ -45,7 +45,14 @@ const updateSelectionMeta = () => {
     selectionMeta.textContent = `${total} photo${total === 1 ? '' : 's'} detected`;
     const disableActions = count === 0;
     if (clearTagsBtn) clearTagsBtn.disabled = disableActions;
-    if (clearSelectionBtn) clearSelectionBtn.disabled = disableActions;
+    if (clearSelectionBtn) {
+        // Only disable if there are truly no selections
+        clearSelectionBtn.disabled = disableActions;
+        // Ensure button is enabled if there are selections
+        if (count > 0) {
+            clearSelectionBtn.disabled = false;
+        }
+    }
 };
 
 const setActiveHotspots = (area) => {
@@ -54,26 +61,19 @@ const setActiveHotspots = (area) => {
         button.classList.toggle('active', isActive);
         button.setAttribute('aria-pressed', String(isActive));
         
-        // Apply area-specific colors only when not active
-        const buttonArea = button.dataset.area;
-        if (buttonArea && !isActive) {
-            const colors = getAreaColor(buttonArea);
-            button.style.backgroundColor = colors.light;
-            button.style.borderColor = colors.border;
-            button.style.color = colors.text;
-            button.style.boxShadow = '0 2px 8px rgba(16, 18, 26, 0.08)';
-        } else if (!isActive) {
-            // Reset to default when not active
-            button.style.backgroundColor = '#f4f5f5';
-            button.style.borderColor = 'rgba(16, 18, 26, 0.15)';
-            button.style.color = '#10121a';
-            button.style.boxShadow = 'none';
-        } else {
+        // Clear inline styles to let CSS handle the styling
+        if (isActive) {
             // Clear inline styles when active to let CSS handle it
             button.style.backgroundColor = '';
             button.style.borderColor = '';
             button.style.color = '';
             button.style.boxShadow = '';
+        } else {
+            // Reset to default white background with #858585 border
+            button.style.backgroundColor = '#ffffff';
+            button.style.borderColor = '#858585';
+            button.style.color = '#10121a';
+            button.style.boxShadow = 'none';
         }
     });
 };
@@ -81,29 +81,23 @@ const setActiveHotspots = (area) => {
 // Add hover effect handlers for area hotspots
 const setupHotspotHovers = () => {
     hotspotButtons.forEach((button) => {
-        const buttonArea = button.dataset.area;
-        if (buttonArea) {
-            const colors = getAreaColor(buttonArea);
-            
-            button.addEventListener('mouseenter', () => {
-                if (!button.classList.contains('active')) {
-                    button.style.backgroundColor = `${colors.primary}15`;
-                    button.style.borderColor = `${colors.primary}60`;
-                    button.style.color = colors.primary;
-                }
-            });
-            
-            button.addEventListener('mouseleave', () => {
-                if (!button.classList.contains('active')) {
-                    const isActive = button.classList.contains('active');
-                    if (!isActive) {
-                        button.style.backgroundColor = colors.light;
-                        button.style.borderColor = colors.border;
-                        button.style.color = colors.text;
-                    }
-                }
-            });
-        }
+        button.addEventListener('mouseenter', () => {
+            if (!button.classList.contains('active')) {
+                // Keep white background and #858585 border on hover
+                button.style.backgroundColor = '#ffffff';
+                button.style.borderColor = '#858585';
+                button.style.color = '#10121a';
+            }
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            if (!button.classList.contains('active')) {
+                // Reset to default white background with #858585 border
+                button.style.backgroundColor = '#ffffff';
+                button.style.borderColor = '#858585';
+                button.style.color = '#10121a';
+            }
+        });
     });
 };
 
@@ -126,7 +120,9 @@ const toggleSelection = (photoId, forceState) => {
 const createPhotoCard = (photo) => {
     const card = document.createElement('div');
     card.className = 'select-card';
-    if (selected.has(photo.id)) {
+    // Check if photo is selected - this should be false after clearing
+    const isSelected = selected.has(photo.id);
+    if (isSelected) {
         card.classList.add('selected');
     }
     if (photo.area) {
@@ -152,10 +148,10 @@ const createPhotoCard = (photo) => {
         const areaBadge = document.createElement('span');
         areaBadge.className = 'area-badge';
         areaBadge.textContent = photo.area;
-        const colors = getAreaColor(photo.area);
-        areaBadge.style.backgroundColor = colors.light;
-        areaBadge.style.borderColor = colors.border;
-        areaBadge.style.color = colors.text;
+        // Use same style as selected buttons (dark green)
+        areaBadge.style.backgroundColor = '#2d5016';
+        areaBadge.style.borderColor = '#2d5016';
+        areaBadge.style.color = '#ffffff';
         footer.appendChild(areaBadge);
     } else {
         addBtn = document.createElement('button');
@@ -184,6 +180,7 @@ const createPhotoCard = (photo) => {
 
 const renderPhotos = () => {
     const state = readState();
+    // Clear the grid completely
     tagGrid.innerHTML = '';
 
     if (!state.photos.length) {
@@ -197,8 +194,10 @@ const renderPhotos = () => {
     tagGrid.classList.remove('hidden');
     emptyState.classList.add('hidden');
 
+    // Recreate all cards - this ensures selected state is properly reflected
     state.photos.forEach((photo) => {
-        tagGrid.appendChild(createPhotoCard(photo));
+        const card = createPhotoCard(photo);
+        tagGrid.appendChild(card);
     });
 
     updateProgress();
@@ -245,10 +244,18 @@ selectAllBtn?.addEventListener('click', () => {
     renderPhotos();
 });
 
-clearSelectionBtn?.addEventListener('click', () => {
-    selected.clear();
-    renderPhotos();
-});
+if (clearSelectionBtn) {
+    clearSelectionBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        // Clear assigned areas of selected photo cards
+        if (selected.size > 0) {
+            clearPhotoAreas(Array.from(selected));
+            // Re-render to update UI - cards will show + button instead of area badge
+            renderPhotos();
+        }
+    });
+}
 
 clearTagsBtn?.addEventListener('click', handleClearTags);
 
@@ -274,12 +281,11 @@ nextBtn?.addEventListener('click', () => {
 // Initialize hotspot colors on page load
 const initializeHotspotColors = () => {
     hotspotButtons.forEach((button) => {
-        const buttonArea = button.dataset.area;
-        if (buttonArea && !button.classList.contains('active')) {
-            const colors = getAreaColor(buttonArea);
-            button.style.backgroundColor = colors.light;
-            button.style.borderColor = colors.border;
-            button.style.color = colors.text;
+        if (!button.classList.contains('active')) {
+            // Set default white background with #858585 border
+            button.style.backgroundColor = '#ffffff';
+            button.style.borderColor = '#858585';
+            button.style.color = '#10121a';
         }
     });
     setupHotspotHovers();
