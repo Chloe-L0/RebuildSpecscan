@@ -7,81 +7,84 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body data-step="5">
-    <header class="app-header">
-        <div class="brand">
-            <span class="badge">SpecScan</span>
-            <h1>Airplane Inspection Console</h1>
-        </div>
-        <div class="step-indicator">
-            <span class="step-label">Step 5 of 7</span>
-            <span class="step-name">Analysis Results</span>
+    <!-- Header -->
+    <header class="capture-header">
+        <div class="header-content">
+            <div class="logo">SPECSCAN</div>
+            <h1 class="header-title">AIRPLANE INSPECTION CONSOLE</h1>
+            <div class="profile-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+            </div>
         </div>
     </header>
 
     <main class="shell">
         <section class="card">
-            <div class="progress-banner" id="statusBanner">
-                <div>
-                    <strong id="statusTitle">Awaiting analysis…</strong>
-                    <div class="muted" id="statusSubtitle">Run analysis to populate detections.</div>
-                </div>
-                <div class="pill" id="resultMeta">--</div>
-            </div>
-
             <div class="loading hidden" id="loadingState">
                 <div class="spinner"></div>
                 <p>Running inference with Roboflow…</p>
             </div>
 
             <div id="resultsContent" class="hidden">
-                <div class="tabs" id="areaTabs"></div>
-
-                <div class="grid-split results-split">
-                    <div class="viewer">
-                        <div class="viewer-meta">
-                            <span id="viewerMeta">Photo --</span>
-                            <div class="button-row">
-                                <button class="secondary" id="prevBtn">Previous</button>
-                                <button class="secondary" id="nextBtn">Next</button>
-                                <button class="secondary" id="addManualBtn" title="Click and drag on image to add manual detection">
-                                    Add Manual Detection
-                                </button>
-                            </div>
+                <div class="results-main-grid">
+                    <!-- Left Section: Verify Detections -->
+                    <div class="results-left-section">
+                        <div class="verify-detections-header">
+                            <h2 class="verify-title">VERIFY DETECTIONS</h2>
+                            <p class="verify-subtitle">Validate the scanning to ensure everything is assessed correctly</p>
                         </div>
-                        <div class="viewer-stage">
-                            <img id="resultImage" alt="Inspection result">
-                            <div class="overlay-layer" id="overlayLayer"></div>
-                        </div>
-                        <div class="viewer-meta">
-                            <div class="slider-group">
-                                <label for="thresholdSlider">Confidence</label>
-                                <input type="range" id="thresholdSlider" min="1" max="100" value="50">
-                                <span id="thresholdValue">50%</span>
+                        
+                        <!-- Area Selection Buttons -->
+                        <div class="results-area-buttons" id="areaTabs"></div>
+                        
+                        <!-- Image Viewer -->
+                        <div class="viewer">
+                            <div class="viewer-meta">
+                                <span id="viewerMeta">Photo --</span>
+                                <div class="button-row">
+                                    <button class="secondary" id="prevBtn">Previous</button>
+                                    <button class="secondary" id="nextBtn">Next</button>
+                                    <button class="secondary" id="addManualBtn" title="Click and drag on image to add manual detection">
+                                        Add Manual Detection
+                                    </button>
+                                </div>
                             </div>
-                            <div class="muted" id="viewerSummary"></div>
+                            <div class="viewer-stage">
+                                <img id="resultImage" alt="Inspection result">
+                                <div class="overlay-layer" id="overlayLayer"></div>
+                                <div class="no-image-message hidden" id="noImageMessage">No image assigned</div>
+                            </div>
+                            <div class="viewer-meta">
+                                <div class="slider-group">
+                                    <label for="thresholdSlider">Confidence</label>
+                                    <input type="range" id="thresholdSlider" min="1" max="100" value="50">
+                                    <span id="thresholdValue">50%</span>
+                                </div>
+                                <div class="muted" id="viewerSummary"></div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="detection-pane">
-                        <h3>Detections</h3>
-                        <div class="detection-list" id="detectionList"></div>
-                        <div class="empty-state hidden" id="emptyDetectionState">
-                            <p>No detections for this area above the current threshold.</p>
-                            <small>Adjust the confidence slider or review a different area.</small>
+                    <!-- Right Section: Detections -->
+                    <div class="results-right-section">
+                        <div class="detection-pane">
+                            <h3 class="detections-header">DETECTIONS</h3>
+                            <div class="detection-list" id="detectionList"></div>
+                            <div class="empty-state hidden" id="emptyDetectionState">
+                                <p>No detections for this area above the current threshold.</p>
+                                <small>Adjust the confidence slider or review a different area.</small>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <footer class="card-footer">
-                <div class="button-row">
-                    <button class="secondary" id="reorganizeBtn">Re-organize Photos</button>
-                    <button class="ghost" id="saveDraftBtn">Save Draft</button>
-                </div>
-                <div class="button-row">
-                    <button class="secondary" id="startOverBtn">Start New Inspection</button>
-                    <button class="primary" id="reportBtn">Continue to Report</button>
-                </div>
+            <footer class="results-footer">
+                <button class="results-back-btn" id="reorganizeBtn">PREVIOUS STEP</button>
+                <button class="results-continue-btn" id="reportBtn">CONTINUE TO REPORT</button>
             </footer>
         </section>
     </main>

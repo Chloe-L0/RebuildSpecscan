@@ -34,8 +34,12 @@ const updateProgress = () => {
     const state = readState();
     const tagged = state.photos.filter((photo) => Boolean(photo.area)).length;
     const total = state.photos.length;
-    tagProgress.textContent = `${tagged} of ${total} photo${total === 1 ? '' : 's'} tagged`;
-    tagSummary.textContent = `Tail ${state.inspection.tailNumber} · ${state.inspection.inspectionType} inspection`;
+    if (tagProgress) {
+        tagProgress.textContent = `${tagged} of ${total} photo${total === 1 ? '' : 's'} tagged`;
+    }
+    if (tagSummary) {
+        tagSummary.textContent = `Tail ${state.inspection.tailNumber} · ${state.inspection.inspectionType} inspection`;
+    }
 };
 
 const updateSelectionMeta = () => {
@@ -103,9 +107,25 @@ const setupHotspotHovers = () => {
 
 const updateNextButton = () => {
     if (!nextBtn) return;
-    const storedArea = sessionStorage.getItem(SELECTED_AREA_KEY);
-    nextBtn.disabled = !storedArea;
-    nextBtn.setAttribute('aria-disabled', String(!storedArea));
+    const state = readState();
+    
+    // Enable button if all photos are tagged
+    // Check that each photo has a non-empty area
+    const allTagged = state.photos.length > 0 && 
+        state.photos.every((photo) => {
+            return photo.area != null && photo.area !== '';
+        });
+    
+    // Explicitly set disabled property
+    if (allTagged) {
+        nextBtn.disabled = false;
+        nextBtn.removeAttribute('disabled');
+        nextBtn.classList.remove('disabled');
+    } else {
+        nextBtn.disabled = true;
+        nextBtn.setAttribute('disabled', 'disabled');
+    }
+    nextBtn.setAttribute('aria-disabled', String(!allTagged));
 };
 
 const toggleSelection = (photoId, forceState) => {
@@ -202,6 +222,7 @@ const renderPhotos = () => {
 
     updateProgress();
     updateSelectionMeta();
+    updateNextButton(); // Update button state when photos are rendered
 };
 
 const assignAreaToSelection = (area) => {
@@ -210,12 +231,14 @@ const assignAreaToSelection = (area) => {
     // Clear selection after tagging to make it easy to select a new group
     selected.clear();
     renderPhotos();
+    updateNextButton(); // Update button state after assigning area
 };
 
 const handleClearTags = () => {
     if (!selected.size) return;
     clearPhotoAreas(Array.from(selected));
     renderPhotos();
+    updateNextButton(); // Update button state after clearing tags
 };
 
 const handleAreaSelection = (area) => {
@@ -263,18 +286,28 @@ backBtn?.addEventListener('click', () => {
     window.location.href = 'capture.html';
 });
 
-nextBtn?.addEventListener('click', () => {
-    const area = sessionStorage.getItem(SELECTED_AREA_KEY);
-    if (!area) {
-        alert('Select an inspection area before continuing.');
-        return;
-    }
+nextBtn?.addEventListener('click', (e) => {
+    // Always check state on click, even if button appears disabled
     const state = readState();
-    const unassigned = state.photos.filter((photo) => !photo.area);
+    
+    // Check if all photos have areas (handle null, undefined, and empty strings)
+    const unassigned = state.photos.filter((photo) => {
+        const hasArea = photo.area && 
+                       (typeof photo.area === 'string' ? photo.area.trim() !== '' : Boolean(photo.area));
+        return !hasArea;
+    });
+    
     if (unassigned.length) {
         alert(`Assign an area to all photos before continuing. ${unassigned.length} photo${unassigned.length === 1 ? '' : 's'} still unassigned.`);
+        updateNextButton(); // Update button state
         return;
     }
+    if (state.photos.length === 0) {
+        alert('Please add photos before continuing.');
+        return;
+    }
+    
+    // Navigate to results page
     window.location.href = 'results.html';
 });
 
@@ -303,5 +336,16 @@ const storedArea = sessionStorage.getItem(SELECTED_AREA_KEY);
 if (storedArea) {
     setActiveHotspots(storedArea);
 }
-updateNextButton();
+
+// Update button state - use setTimeout to ensure DOM is ready
+setTimeout(() => {
+    updateNextButton();
+}, 0);
+
+// Also update whenever the page becomes visible (in case state changed in another tab)
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+        updateNextButton();
+    }
+});
 

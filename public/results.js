@@ -120,6 +120,7 @@ const thresholdSlider = document.getElementById('thresholdSlider');
 const thresholdValue = document.getElementById('thresholdValue');
 const detectionList = document.getElementById('detectionList');
 const emptyDetectionState = document.getElementById('emptyDetectionState');
+const noImageMessage = document.getElementById('noImageMessage');
 const prevBtn = document.getElementById('prevBtn');
 const nextBtn = document.getElementById('nextBtn');
 const reorganizeBtn = document.getElementById('reorganizeBtn');
@@ -676,9 +677,21 @@ const toggleLoading = (visible) => {
 };
 
 const updateStatus = (title, subtitle, meta) => {
-    statusTitle.textContent = title;
-    statusSubtitle.textContent = subtitle;
-    resultMeta.textContent = meta;
+    if (statusTitle) statusTitle.textContent = title;
+    if (statusSubtitle) statusSubtitle.textContent = subtitle;
+    if (resultMeta) {
+        // Format as "CONFIDENCE > X%" for the filter pill
+        if (meta && meta.includes('Confidence')) {
+            const thresholdMatch = meta.match(/(\d+)%/);
+            if (thresholdMatch) {
+                resultMeta.textContent = `CONFIDENCE > ${thresholdMatch[1]}%`;
+            } else {
+                resultMeta.textContent = meta;
+            }
+        } else {
+            resultMeta.textContent = meta || '--';
+        }
+    }
 };
 
 const runAnalysis = async () => {
@@ -793,17 +806,17 @@ const renderTabs = (state) => {
         tab.className = `tab${area === activeArea ? ' active' : ''}`;
         tab.innerHTML = `<span>${area}</span><span class="tab-count">${counts[area] || 0}</span>`;
         
-        // Apply area-specific colors
-        const colors = getAreaColor(area);
+        // Apply same styling as step 4: white background with #858585 border when unselected, dark green when selected
         if (area === activeArea) {
-            tab.style.backgroundColor = colors.primary;
-            tab.style.borderColor = colors.primary;
+            tab.style.backgroundColor = '#2d5016';
+            tab.style.borderColor = '#2d5016';
             tab.style.color = '#ffffff';
-            tab.style.boxShadow = `0 10px 22px ${colors.primary}40`;
+            tab.style.boxShadow = '0 8px 20px rgba(45, 80, 22, 0.3)';
         } else {
-            tab.style.backgroundColor = colors.light;
-            tab.style.borderColor = colors.border;
-            tab.style.color = colors.text;
+            tab.style.backgroundColor = '#ffffff';
+            tab.style.borderColor = '#858585';
+            tab.style.color = '#10121a';
+            tab.style.boxShadow = 'none';
         }
         
         tab.addEventListener('click', () => {
@@ -1299,6 +1312,10 @@ const renderViewer = () => {
 
     if (!areaPhotos.length) {
         resultImage.removeAttribute('src');
+        resultImage.style.display = 'none';
+        if (noImageMessage) {
+            noImageMessage.classList.remove('hidden');
+        }
         viewerMeta.textContent = 'No photos tagged for this area';
         viewerSummary.textContent = '';
         prevBtn.disabled = true;
@@ -1306,6 +1323,12 @@ const renderViewer = () => {
         overlayLayer.innerHTML = '';
         renderDetectionList(state, area);
         return;
+    }
+    
+    // Show image and hide message when photos exist
+    resultImage.style.display = 'block';
+    if (noImageMessage) {
+        noImageMessage.classList.add('hidden');
     }
     
     // Set default crosshair cursor for drawing
