@@ -30,7 +30,7 @@ const getColorForClass = (className) => {
     return DEFECT_COLORS[index];
 };
 
-const reportSummaryMeta = document.getElementById('reportSummaryMeta');
+const reportTailNumber = document.getElementById('reportTailNumber');
 const totalPhotosEl = document.getElementById('totalPhotos');
 const totalDetectionsEl = document.getElementById('totalDetections');
 const areasInspectedEl = document.getElementById('areasInspected');
@@ -83,8 +83,9 @@ const renderSummary = () => {
     const inspectedAreas = new Set(tagged.map((photo) => photo.area));
     const detectionCount = computeDetectionTotals(state, state.report.includeFalsePositives);
 
-    if (reportSummaryMeta) {
-        reportSummaryMeta.textContent = formatMeta(state);
+    if (reportTailNumber) {
+        const tailNumber = state.inspection.tailNumber || '--';
+        reportTailNumber.textContent = `Tail ${tailNumber}`;
     }
     if (totalPhotosEl) {
         totalPhotosEl.textContent = tagged.length.toString();
@@ -939,6 +940,9 @@ const generatePdf = async () => {
     link.click();
     URL.revokeObjectURL(url);
 };
+
+// Export generatePdf for use in other modules
+export { generatePdf };
 
 thumbnailToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeThumbnails: event.target.checked });

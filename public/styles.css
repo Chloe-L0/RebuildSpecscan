@@ -1013,6 +1013,15 @@ body[data-step="6"] .capture-header {
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
+body[data-step="7"] {
+    background: #142741;
+}
+
+body[data-step="7"] .capture-header {
+    background: #FFFFFF;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
 .report-page {
     background: #142741;
     min-height: 100vh;
@@ -1078,8 +1087,8 @@ body[data-step="6"] .capture-header {
 }
 
 .report-summary-section {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 24px;
 }
 
@@ -1318,12 +1327,12 @@ body[data-step="6"] .capture-header {
     width: 82px;
     height: 82px;
     border-radius: 50%;
-    background: rgba(42, 157, 143, 0.12);
-    border: 2px solid rgba(42, 157, 143, 0.45);
+    background: #ffe7c4bf;
+    border: 2px solid #B08D57;
     display: grid;
     place-items: center;
     margin: 0 auto 12px;
-    color: var(--success);
+    color: #B08D57;
     font-size: 32px;
 }
 
@@ -1925,9 +1934,9 @@ body.capture-page {
 }
 
 .header-content {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     align-items: center;
-    justify-content: space-between;
     max-width: 1400px;
     margin: 0 auto;
 }
@@ -1944,8 +1953,10 @@ body.capture-page {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.15em;
-    color: #142741;
+    color: #858585;
     margin: 0;
+    text-align: center;
+    justify-self: center;
 }
 
 .profile-icon {
@@ -1959,6 +1970,7 @@ body.capture-page {
     color: #142741;
     cursor: pointer;
     transition: background 0.2s ease;
+    justify-self: end;
 }
 
 .profile-icon:hover {

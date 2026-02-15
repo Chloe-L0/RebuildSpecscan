@@ -37,20 +37,21 @@ const hydrateForm = () => {
     }
     
     // Update inspection type radio buttons and toggle button states
-    const radio = form?.elements.namedItem('inspectionType');
-    if (radio) {
-        const inputs = Array.isArray(radio) ? radio : [radio];
+    const inputs = form?.querySelectorAll('input[name="inspectionType"]');
+    if (inputs && inputs.length > 0) {
         const inspectionType = state.inspection.inspectionType || 'Outbound';
         
         inputs.forEach((input) => {
-            input.checked = input.value === inspectionType;
-            // Update toggle button visual state
-            const toggleButton = input.closest('.toggle-button');
-            if (toggleButton) {
-                if (input.checked) {
-                    toggleButton.classList.add('active');
-                } else {
-                    toggleButton.classList.remove('active');
+            if (input instanceof HTMLInputElement) {
+                input.checked = input.value === inspectionType;
+                // Update toggle button visual state
+                const toggleButton = input.closest('.toggle-button');
+                if (toggleButton) {
+                    if (input.checked) {
+                        toggleButton.classList.add('active');
+                    } else {
+                        toggleButton.classList.remove('active');
+                    }
                 }
             }
         });
@@ -78,11 +79,10 @@ const handleStart = () => {
     const department = departmentInput?.value || '';
     
     // Get inspection type from radio buttons
-    const inspectionTypeRadio = form?.elements.namedItem('inspectionType');
+    const inspectionTypeInputs = form?.querySelectorAll('input[name="inspectionType"]');
     let inspectionType = 'Outbound';
-    if (inspectionTypeRadio) {
-        const inputs = Array.isArray(inspectionTypeRadio) ? inspectionTypeRadio : [inspectionTypeRadio];
-        const checked = inputs.find(input => input.checked);
+    if (inspectionTypeInputs && inspectionTypeInputs.length > 0) {
+        const checked = Array.from(inspectionTypeInputs).find(input => input instanceof HTMLInputElement && input.checked);
         if (checked) {
             inspectionType = checked.value;
         }

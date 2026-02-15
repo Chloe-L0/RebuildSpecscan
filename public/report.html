@@ -10,7 +10,7 @@
     <!-- Header -->
     <header class="capture-header">
         <div class="header-content">
-            <div class="logo">SPECSCAN</div>
+            <div class="logo">VERiiO</div>
             <h1 class="header-title">AIRPLANE INSPECTION CONSOLE</h1>
             <div class="profile-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -24,36 +24,27 @@
     <main class="shell report-page">
         <section class="card report-card">
             <div class="report-header">
-                <h2 class="report-title">REVIEW FINDINGS BEFORE EXPORT</h2>
-                <p class="report-subtitle" id="reportSummaryMeta">captionn</p>
+                <h2 class="report-title">EXPORT Report</h2>
+                <p class="report-subtitle" id="reportTailNumber">Tail --</p>
             </div>
 
-            <div class="report-main-layout">
-                <!-- Left Side: 3D Viewer -->
-                <div class="report-image-section">
-                    <div class="report-image-container" id="report3DViewer">
-                        <!-- 3D viewer will be rendered here -->
-                    </div>
-                </div>
-
-                <!-- Right Side: Summary Boxes -->
-                <div class="report-summary-section">
-                    <article class="report-summary-box">
-                        <h3 class="summary-box-title">AREAS INSPECTED</h3>
-                        <div class="summary-box-value" id="areasInspected">1</div>
-                        <p class="summary-box-desc">Distinct airframe in this session</p>
-                    </article>
-                    <article class="report-summary-box">
-                        <h3 class="summary-box-title">TOTAL PHOTOS</h3>
-                        <div class="summary-box-value" id="totalPhotos">2</div>
-                        <p class="summary-box-desc">Captured and Tagged Across All Areas</p>
-                    </article>
-                    <article class="report-summary-box">
-                        <h3 class="summary-box-title">DETECTIONS</h3>
-                        <div class="summary-box-value" id="totalDetections">1</div>
-                        <p class="summary-box-desc">Filtered by confidence and false-positive status.</p>
-                    </article>
-                </div>
+            <!-- Summary Boxes -->
+            <div class="report-summary-section">
+                <article class="report-summary-box">
+                    <h3 class="summary-box-title">AREAS INSPECTED</h3>
+                    <div class="summary-box-value" id="areasInspected">1</div>
+                    <p class="summary-box-desc">Distinct airframe in this session</p>
+                </article>
+                <article class="report-summary-box">
+                    <h3 class="summary-box-title">TOTAL PHOTOS</h3>
+                    <div class="summary-box-value" id="totalPhotos">2</div>
+                    <p class="summary-box-desc">Captured and Tagged Across All Areas</p>
+                </article>
+                <article class="report-summary-box">
+                    <h3 class="summary-box-title">DETECTIONS</h3>
+                    <div class="summary-box-value" id="totalDetections">1</div>
+                    <p class="summary-box-desc">Filtered by confidence and false-positive status.</p>
+                </article>
             </div>
 
             <!-- Export Preferences -->
@@ -82,17 +73,8 @@
         </section>
     </main>
 
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-        }
-    }
-    </script>
     <script type="module" src="state.js"></script>
     <script type="module" src="report.js"></script>
-    <script type="module" src="report-3d-viewer.js"></script>
 </body>
 </html>
 
