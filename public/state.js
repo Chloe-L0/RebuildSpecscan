@@ -381,7 +381,15 @@ export const togglePhotoFlagged = (photoId) =>
     updateState((draft) => {
         draft.photos = draft.photos.map((photo) => {
             if (photo.id === photoId) {
-                return { ...photo, flagged: !photo.flagged };
+                const updated = { ...photo, flagged: !photo.flagged };
+                // Save to localStorage when flagged
+                if (updated.flagged) {
+                    saveFlaggedImageToStorage(updated);
+                } else {
+                    // Remove from storage when unflagged
+                    removeFlaggedImageFromStorage(photoId);
+                }
+                return updated;
             }
             return photo;
         });
@@ -392,7 +400,12 @@ export const updatePhotoFlaggedNote = (photoId, note) =>
     updateState((draft) => {
         draft.photos = draft.photos.map((photo) => {
             if (photo.id === photoId) {
-                return { ...photo, flaggedNote: note || '' };
+                const updated = { ...photo, flaggedNote: note || '' };
+                // Update localStorage if photo is flagged
+                if (updated.flagged) {
+                    saveFlaggedImageToStorage(updated);
+                }
+                return updated;
             }
             return photo;
         });
@@ -460,6 +473,74 @@ export const loadInspectionFromHistory = (id) => {
     } catch {
         return false;
     }
+};
+
+// ---------------------------------------------------------------------------
+// Flagged Images Storage (Persistent) - localStorage
+// ---------------------------------------------------------------------------
+const FLAGGED_IMAGES_STORAGE_KEY = 'specscanFlaggedImages';
+
+const saveFlaggedImageToStorage = (photo) => {
+    try {
+        const existing = getAllFlaggedImages();
+        // Find if this photo already exists (by photo.id or by dataURL)
+        const index = existing.findIndex((item) => item.id === photo.id || item.dataURL === photo.dataURL);
+        
+        const flaggedItem = {
+            id: photo.id,
+            number: photo.number,
+            name: photo.name,
+            dataURL: photo.dataURL,
+            area: photo.area || null,
+            flagged: true,
+            flaggedNote: photo.flaggedNote || '',
+            flaggedAt: new Date().toISOString(),
+            // Store inspection context if available
+            inspection: readState().inspection ? {
+                tailNumber: readState().inspection.tailNumber || '',
+                inspectionType: readState().inspection.inspectionType || '',
+                inspectorName: readState().inspection.inspectorName || '',
+                startedAt: readState().inspection.startedAt || null
+            } : null
+        };
+        
+        if (index >= 0) {
+            // Update existing
+            existing[index] = { ...existing[index], ...flaggedItem };
+        } else {
+            // Add new
+            existing.push(flaggedItem);
+        }
+        
+        localStorage.setItem(FLAGGED_IMAGES_STORAGE_KEY, JSON.stringify(existing));
+    } catch (e) {
+        console.warn('Failed to save flagged image to storage', e);
+    }
+};
+
+const removeFlaggedImageFromStorage = (photoId) => {
+    try {
+        const existing = getAllFlaggedImages();
+        const filtered = existing.filter((item) => item.id !== photoId);
+        localStorage.setItem(FLAGGED_IMAGES_STORAGE_KEY, JSON.stringify(filtered));
+    } catch (e) {
+        console.warn('Failed to remove flagged image from storage', e);
+    }
+};
+
+export const getAllFlaggedImages = () => {
+    try {
+        const raw = localStorage.getItem(FLAGGED_IMAGES_STORAGE_KEY);
+        if (!raw) return [];
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list : [];
+    } catch {
+        return [];
+    }
+};
+
+export const deleteFlaggedImage = (photoId) => {
+    removeFlaggedImageFromStorage(photoId);
 };
 
 // Keep Netlify function warm: ping /api/health every 4 min (initial + interval), silent errors
