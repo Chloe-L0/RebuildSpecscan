@@ -1892,6 +1892,26 @@ body[data-step="7"] .capture-header {
     margin-bottom: 8px;
 }
 
+.title-section-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 16px;
+}
+
+.step-indicator-new {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.step-label-new {
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFFFFF;
+    letter-spacing: 0.05em;
+}
+
 .page-title {
     font-size: 32px;
     font-weight: 700;
@@ -1963,10 +1983,10 @@ body[data-step="7"] .capture-header {
 .info-card input[type="text"],
 .info-card select {
     width: 100%;
-    padding: 12px 16px;
+    padding: 12px 20px;
     border: 1px solid #EAF0F5;
     border-radius: 6px;
-    font-size: 15px;
+    font-size: 20px;
     background: #FFFFFF;
     color: #142741;
     transition: border-color 0.2s ease;
@@ -1983,6 +2003,12 @@ body[data-step="7"] .capture-header {
 }
 
 /* Toggle Group (Inspection Type) */
+.info-card fieldset {
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
 .toggle-group {
     display: flex;
     gap: 12px;
@@ -2173,10 +2199,18 @@ body.capture-page {
     align-items: center;
     max-width: 1400px;
     margin: 0 auto;
+    gap: 20px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    justify-self: end;
 }
 
 .logo {
-    font-size: 18px;
+    font-size: 28px;
     font-weight: 700;
     letter-spacing: 0.1em;
     color: #B08D57;
@@ -2204,7 +2238,7 @@ body.capture-page {
     color: #142741;
     cursor: pointer;
     transition: background 0.2s ease;
-    justify-self: end;
+    flex-shrink: 0;
 }
 
 .profile-icon:hover {

@@ -430,14 +430,69 @@ const generatePdf = async () => {
     });
     cursor.y -= 18;
     
-    // Try to capture 3D views
+    // Try to capture 3D views - wait for viewer to be ready
     let technicalViews = { top: null, side: null, front: null };
-    if (typeof window !== 'undefined' && window.captureTechnicalViews) {
+    
+    // Wait for 3D viewer functions to be available (they're loaded as a module)
+    let attempts = 0;
+    const maxAttempts = 50; // Wait up to 5 seconds
+    while (typeof window === 'undefined' || 
+           (!window.captureTechnicalViewsWithWait && !window.captureTechnicalViews) && 
+           attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+    }
+    
+    console.log('Checking for 3D capture functions:', {
+        hasCaptureTechnicalViewsWithWait: typeof window !== 'undefined' && !!window.captureTechnicalViewsWithWait,
+        hasCaptureTechnicalViews: typeof window !== 'undefined' && !!window.captureTechnicalViews,
+        attempts: attempts
+    });
+    
+    if (typeof window !== 'undefined' && window.captureTechnicalViewsWithWait) {
         try {
+            console.log('Attempting to capture 3D technical views for PDF using captureTechnicalViewsWithWait...');
+            technicalViews = await window.captureTechnicalViewsWithWait();
+            console.log('3D views captured:', {
+                top: !!technicalViews.top,
+                side: !!technicalViews.side,
+                front: !!technicalViews.front,
+                topLength: technicalViews.top ? technicalViews.top.length : 0,
+                sideLength: technicalViews.side ? technicalViews.side.length : 0,
+                frontLength: technicalViews.front ? technicalViews.front.length : 0
+            });
+        } catch (error) {
+            console.error('Failed to capture technical views with wait:', error);
+            // Fallback to regular capture if available
+            if (window.captureTechnicalViews) {
+                try {
+                    console.log('Trying fallback capture...');
+                    technicalViews = await window.captureTechnicalViews();
+                    console.log('Fallback capture result:', {
+                        top: !!technicalViews.top,
+                        side: !!technicalViews.side,
+                        front: !!technicalViews.front
+                    });
+                } catch (fallbackError) {
+                    console.error('Fallback capture also failed:', fallbackError);
+                }
+            }
+        }
+    } else if (typeof window !== 'undefined' && window.captureTechnicalViews) {
+        // Fallback to regular capture
+        try {
+            console.log('Using regular captureTechnicalViews (no wait function available)...');
             technicalViews = await window.captureTechnicalViews();
+            console.log('Regular capture result:', {
+                top: !!technicalViews.top,
+                side: !!technicalViews.side,
+                front: !!technicalViews.front
+            });
         } catch (error) {
             console.error('Failed to capture technical views:', error);
         }
+    } else {
+        console.warn('No 3D capture functions available on window object');
     }
     
     // Display views with proper aspect ratio and spacing
