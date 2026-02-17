@@ -111,6 +111,8 @@ const DEFAULT_STATE = {
         includeThumbnails: true,
         includeFalsePositives: false,
         includeAllPhotos: true,
+        includeFlaggedImages: false,
+        includeFlaggedImageNotes: false,
         notes: ''
     }
 };
@@ -189,7 +191,9 @@ export const addPhotosToState = (photos) =>
                 number: draft.photos.length + 1,
                 name: photo.name,
                 dataURL: photo.dataURL,
-                area: photo.area ?? null
+                area: photo.area ?? null,
+                flagged: photo.flagged ?? false,
+                flaggedNote: photo.flaggedNote ?? ''
             });
             draft.nextPhotoId += 1;
         });
@@ -369,6 +373,28 @@ export const updateDetectionBbox = (detectionId, bbox) =>
                 };
             }
             return detection;
+        });
+        return draft;
+    });
+
+export const togglePhotoFlagged = (photoId) =>
+    updateState((draft) => {
+        draft.photos = draft.photos.map((photo) => {
+            if (photo.id === photoId) {
+                return { ...photo, flagged: !photo.flagged };
+            }
+            return photo;
+        });
+        return draft;
+    });
+
+export const updatePhotoFlaggedNote = (photoId, note) =>
+    updateState((draft) => {
+        draft.photos = draft.photos.map((photo) => {
+            if (photo.id === photoId) {
+                return { ...photo, flaggedNote: note || '' };
+            }
+            return photo;
         });
         return draft;
     });

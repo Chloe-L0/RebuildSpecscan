@@ -2,6 +2,7 @@ import {
     AREAS,
     readState,
     summarizeDetectionsByArea,
+    updatePhotoFlaggedNote,
     updateReportOptions
 } from './state.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
@@ -37,7 +38,11 @@ const areasInspectedEl = document.getElementById('areasInspected');
 const thumbnailToggle = document.getElementById('thumbnailToggle');
 const falsePositiveToggle = document.getElementById('falsePositiveToggle');
 const allPhotosToggle = document.getElementById('allPhotosToggle');
+const flaggedImagesToggle = document.getElementById('flaggedImagesToggle');
+const flaggedImageNotesToggle = document.getElementById('flaggedImageNotesToggle');
 const reportNotesEl = document.getElementById('reportNotes');
+const flaggedImagesList = document.getElementById('flaggedImagesList');
+const flaggedImagesNotesSection = document.getElementById('flaggedImagesNotesSection');
 const backToResultsBtn = document.getElementById('backToResultsBtn');
 const downloadReportBtn = document.getElementById('downloadReportBtn');
 const submitInspectionBtn = document.getElementById('submitInspectionBtn');
@@ -108,9 +113,89 @@ const renderSummary = () => {
     if (allPhotosToggle) {
         allPhotosToggle.checked = state.report.includeAllPhotos;
     }
+    if (flaggedImagesToggle) {
+        flaggedImagesToggle.checked = state.report.includeFlaggedImages;
+    }
+    if (flaggedImageNotesToggle) {
+        flaggedImageNotesToggle.checked = state.report.includeFlaggedImageNotes;
+    }
     if (reportNotesEl) {
         reportNotesEl.value = state.report.notes || '';
     }
+    
+    // Render flagged images with notes
+    renderFlaggedImagesNotes();
+};
+
+const renderFlaggedImagesNotes = () => {
+    const state = readState();
+    const flaggedPhotos = state.photos.filter((photo) => photo.flagged);
+    
+    if (!flaggedImagesList || !flaggedImagesNotesSection) return;
+    
+    // Show/hide section based on whether there are flagged images
+    if (flaggedPhotos.length === 0) {
+        flaggedImagesNotesSection.style.display = 'none';
+        return;
+    }
+    
+    flaggedImagesNotesSection.style.display = 'block';
+    flaggedImagesList.innerHTML = '';
+    
+    flaggedPhotos.forEach((photo) => {
+        const item = document.createElement('div');
+        item.className = 'flagged-image-item';
+        item.dataset.photoId = photo.id;
+        
+        const header = document.createElement('div');
+        header.className = 'flagged-image-header';
+        
+        const title = document.createElement('h4');
+        title.className = 'flagged-image-title';
+        title.textContent = `Photo #${photo.number} - ${photo.area || 'Unknown Area'}`;
+        header.appendChild(title);
+        
+        // Thumbnail preview
+        const thumbnail = document.createElement('div');
+        thumbnail.className = 'flagged-image-thumbnail';
+        const img = document.createElement('img');
+        img.src = photo.dataURL;
+        img.alt = `Photo #${photo.number}`;
+        img.style.maxWidth = '120px';
+        img.style.maxHeight = '120px';
+        img.style.objectFit = 'contain';
+        img.style.borderRadius = '4px';
+        img.style.border = '1px solid rgba(0, 0, 0, 0.1)';
+        thumbnail.appendChild(img);
+        
+        const content = document.createElement('div');
+        content.className = 'flagged-image-content';
+        
+        const noteLabel = document.createElement('label');
+        noteLabel.className = 'flagged-image-note-label';
+        noteLabel.textContent = 'Note:';
+        noteLabel.setAttribute('for', `flagged-note-${photo.id}`);
+        
+        const noteInput = document.createElement('textarea');
+        noteInput.id = `flagged-note-${photo.id}`;
+        noteInput.className = 'flagged-image-note-input';
+        noteInput.placeholder = 'Add a note about this flagged image...';
+        noteInput.rows = 3;
+        noteInput.value = photo.flaggedNote || '';
+        
+        // Update note on input
+        noteInput.addEventListener('input', (event) => {
+            updatePhotoFlaggedNote(photo.id, event.target.value);
+        });
+        
+        content.appendChild(noteLabel);
+        content.appendChild(noteInput);
+        
+        item.appendChild(header);
+        item.appendChild(thumbnail);
+        item.appendChild(content);
+        flaggedImagesList.appendChild(item);
+    });
 };
 
 const filterIncludedDetections = (state) => {
@@ -350,6 +435,142 @@ const generatePdf = async () => {
         lineHeight: notesLineHeight
     });
     cursor.y -= notesLineCount * notesLineHeight;
+
+    // ========================================
+    // FLAGGED IMAGES SECTION (if enabled)
+    // ========================================
+    if (state.report.includeFlaggedImages) {
+        const flaggedPhotos = state.photos.filter((photo) => photo.flagged);
+        if (flaggedPhotos.length > 0) {
+            cursor.y -= 20;
+            ensureSpace(pdfDoc, cursor, 100);
+            addSectionTitle('FLAGGED IMAGES - DEFECTS REQUIRING ATTENTION');
+            
+            const imagesPerPage = 2;
+            const imageWidth = (612 - cursor.margin * 3) / 2; // 2 images with margins
+            let imagesOnPage = 0;
+            let currentX = cursor.margin;
+            let currentY = cursor.y;
+            let lastDisplayHeight = 0;
+            
+            for (const photo of flaggedPhotos) {
+                if (imagesOnPage >= imagesPerPage) {
+                    cursor.page = pdfDoc.addPage([612, 792]);
+                    cursor.y = 792 - cursor.margin;
+                    currentY = cursor.y;
+                    currentX = cursor.margin;
+                    imagesOnPage = 0;
+                }
+                
+                try {
+                    // Get detections for this photo
+                    const photoDetections = includedDetections.filter((det) => det.photoId === photo.id);
+                    const annotated = await createAnnotatedImage(photo, photoDetections, null);
+                    const pngImage = await pdfDoc.embedPng(annotated);
+                    const scale = imageWidth / pngImage.width;
+                    const displayHeight = pngImage.height * scale;
+                    lastDisplayHeight = displayHeight;
+                    
+                    // Ensure we have space for the image
+                    if (currentY - displayHeight - 30 < cursor.margin) {
+                        cursor.page = pdfDoc.addPage([612, 792]);
+                        cursor.y = 792 - cursor.margin;
+                        currentY = cursor.y;
+                        currentX = cursor.margin;
+                        imagesOnPage = 0;
+                    }
+                    
+                    // Label
+                    cursor.page.drawText(`Flagged Image - Photo #${photo.number} - ${photo.area || 'Unknown'}`, {
+                        x: currentX,
+                        y: currentY,
+                        size: 10,
+                        font: fonts.bold,
+                        color: rgb(0.1, 0.1, 0.1)
+                    });
+                    currentY -= 16;
+                    
+                    // Image
+                    cursor.page.drawImage(pngImage, {
+                        x: currentX,
+                        y: currentY - displayHeight,
+                        width: imageWidth,
+                        height: displayHeight
+                    });
+                    
+                    // Add note if enabled and note exists
+                    let noteHeight = 0;
+                    if (state.report.includeFlaggedImageNotes && photo.flaggedNote && photo.flaggedNote.trim()) {
+                        const noteY = currentY - displayHeight - 8;
+                        const noteText = `Note: ${photo.flaggedNote.trim()}`;
+                        const noteMaxWidth = imageWidth;
+                        const noteLines = wrapText(noteText, fonts.regular, 9, noteMaxWidth);
+                        noteHeight = noteLines.length * 11 + 4;
+                        
+                        // Ensure we have space for the note
+                        if (noteY - noteHeight < cursor.margin) {
+                            cursor.page = pdfDoc.addPage([612, 792]);
+                            cursor.y = 792 - cursor.margin;
+                            currentY = cursor.y;
+                            currentX = cursor.margin;
+                            imagesOnPage = 0;
+                            // Redraw label and image on new page
+                            cursor.page.drawText(`Flagged Image - Photo #${photo.number} - ${photo.area || 'Unknown'}`, {
+                                x: currentX,
+                                y: currentY,
+                                size: 10,
+                                font: fonts.bold,
+                                color: rgb(0.1, 0.1, 0.1)
+                            });
+                            currentY -= 16;
+                            cursor.page.drawImage(pngImage, {
+                                x: currentX,
+                                y: currentY - displayHeight,
+                                width: imageWidth,
+                                height: displayHeight
+                            });
+                        }
+                        
+                        // Draw note below image
+                        const finalNoteY = currentY - displayHeight - 8;
+                        noteLines.forEach((line, idx) => {
+                            cursor.page.drawText(line, {
+                                x: currentX,
+                                y: finalNoteY - idx * 11,
+                                size: 9,
+                                font: fonts.regular,
+                                color: rgb(0.1, 0.1, 0.1)
+                            });
+                        });
+                    }
+                    
+                    currentX += imageWidth + cursor.margin;
+                    if (currentX + imageWidth > 612 - cursor.margin) {
+                        currentX = cursor.margin;
+                        currentY -= displayHeight + noteHeight + 40;
+                        imagesOnPage++;
+                    } else {
+                        imagesOnPage++;
+                    }
+                    
+                    // Update cursor position
+                    if (currentX === cursor.margin) {
+                        cursor.y = currentY;
+                    }
+                } catch (error) {
+                    console.error('Failed to embed flagged image', error);
+                }
+            }
+            
+            // Update cursor after flagged images section
+            if (currentX === cursor.margin) {
+                cursor.y = currentY;
+            } else {
+                cursor.y = currentY - lastDisplayHeight - 40;
+            }
+            cursor.y -= 20;
+        }
+    }
 
     cursor.y -= 12;
     addSectionTitle('AIRCRAFT SECTIONING FOR INSPECTION PROCESS');
@@ -1029,6 +1250,16 @@ falsePositiveToggle?.addEventListener('change', (event) => {
 
 allPhotosToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeAllPhotos: event.target.checked });
+    renderSummary();
+});
+
+flaggedImagesToggle?.addEventListener('change', (event) => {
+    updateReportOptions({ includeFlaggedImages: event.target.checked });
+    renderSummary();
+});
+
+flaggedImageNotesToggle?.addEventListener('change', (event) => {
+    updateReportOptions({ includeFlaggedImageNotes: event.target.checked });
     renderSummary();
 });
 

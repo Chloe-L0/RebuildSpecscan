@@ -77,6 +77,14 @@
                         <input type="checkbox" id="allPhotosToggle" checked>
                         <span>Include all captured photos in appendix</span>
                     </label>
+                    <label class="radio-option">
+                        <input type="checkbox" id="flaggedImagesToggle">
+                        <span>Include flagged images in report (after notes section)</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="checkbox" id="flaggedImageNotesToggle">
+                        <span>Include notes for flagged images in report</span>
+                    </label>
                 </div>
             </div>
 
@@ -85,6 +93,15 @@
                 <h3 class="preferences-title">ADD NOTES</h3>
                 <p class="report-notes-desc">Notes are included in the exported report PDF.</p>
                 <textarea id="reportNotes" class="report-notes-field" placeholder="Add inspection notes, observations, or comments…" rows="4"></textarea>
+            </div>
+
+            <!-- Flagged Images Notes Section -->
+            <div class="flagged-images-notes-section" id="flaggedImagesNotesSection">
+                <h3 class="preferences-title">FLAGGED IMAGES NOTES</h3>
+                <p class="report-notes-desc">Add notes for each flagged image. These notes will appear in the report if enabled.</p>
+                <div class="flagged-images-list" id="flaggedImagesList">
+                    <!-- Flagged images with note inputs will be rendered here -->
+                </div>
             </div>
 
             <!-- 3D Visualization Report -->

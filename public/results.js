@@ -13,6 +13,7 @@ import {
     setCurrentPhotoIndex,
     summarizeDetectionsByArea,
     toggleFalsePositive,
+    togglePhotoFlagged,
     toInspectionAreaSlug,
     updateDetectionBbox
 } from './state.js';
@@ -127,6 +128,8 @@ const reorganizeBtn = document.getElementById('reorganizeBtn');
 const reportBtn = document.getElementById('reportBtn');
 const startOverBtn = document.getElementById('startOverBtn');
 const saveDraftBtn = document.getElementById('saveDraftBtn');
+const flagBtn = document.getElementById('flagBtn');
+const flagBtnText = document.getElementById('flagBtnText');
 
 let activeHighlight = null;
 
@@ -1349,6 +1352,13 @@ const renderViewer = () => {
         ? `${detectionsForPhoto.length} detection${detectionsForPhoto.length === 1 ? '' : 's'}`
         : 'No detections';
     viewerSummary.textContent = summary;
+    
+    // Update flag button state
+    if (flagBtn && flagBtnText) {
+        const isFlagged = currentPhoto.flagged || false;
+        flagBtn.classList.toggle('flagged', isFlagged);
+        flagBtnText.textContent = isFlagged ? 'Flagged' : 'Flag Image';
+    }
 
     // Set up image load handler
     const handleImageLoad = () => {
@@ -1464,6 +1474,19 @@ addManualBtn?.addEventListener('click', () => {
     const viewerStage = getViewerStage();
     if (viewerStage) {
         viewerStage.focus();
+    }
+});
+
+// Flag button handler
+flagBtn?.addEventListener('click', () => {
+    const state = readState();
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const index = state.analysis.currentPhotoIndex ?? 0;
+    const currentPhoto = areaPhotos[index];
+    if (currentPhoto) {
+        togglePhotoFlagged(currentPhoto.id);
+        render();
     }
 });
 
