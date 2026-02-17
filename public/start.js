@@ -4,7 +4,9 @@ import {
     getInspectionHistory,
     loadInspectionFromHistory,
     getAllFlaggedImages,
-    deleteFlaggedImage
+    deleteFlaggedImage,
+    getAllGeneralNotes,
+    deleteGeneralNote
 } from './state.js';
 
 const form = document.getElementById('startForm');
@@ -27,6 +29,13 @@ const flaggedImagesBackdrop = document.getElementById('flaggedImagesBackdrop');
 const flaggedImagesList = document.getElementById('flaggedImagesList');
 const flaggedImagesEmpty = document.getElementById('flaggedImagesEmpty');
 const flaggedImagesSearch = document.getElementById('flaggedImagesSearch');
+const clipboardNavBtn = document.getElementById('clipboardNavBtn');
+const clipboardPanel = document.getElementById('clipboardPanel');
+const clipboardPanelClose = document.getElementById('clipboardPanelClose');
+const clipboardBackdrop = document.getElementById('clipboardBackdrop');
+const clipboardList = document.getElementById('clipboardList');
+const clipboardEmpty = document.getElementById('clipboardEmpty');
+const clipboardSearch = document.getElementById('clipboardSearch');
 
 const formatDateTime = (date) =>
     date.toLocaleString(undefined, {
@@ -343,6 +352,117 @@ flaggedImagesBackdrop?.addEventListener('click', closeFlaggedImagesPanel);
 flaggedImagesSearch?.addEventListener('input', () => renderFlaggedImagesList());
 flaggedImagesSearch?.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeFlaggedImagesPanel();
+});
+
+// ---------------------------------------------------------------------------
+// General Notes (Clipboard) panel
+// ---------------------------------------------------------------------------
+const formatNoteDate = (isoString) => {
+    if (!isoString) return '—';
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+const matchesNoteSearch = (item, q) => {
+    if (!q || !q.trim()) return true;
+    const lower = q.trim().toLowerCase();
+    const note = (item.note || '').toLowerCase();
+    const tail = (item.inspection?.tailNumber || '').toLowerCase();
+    const inspector = (item.inspection?.inspectorName || '').toLowerCase();
+    const type = (item.inspection?.inspectionType || '').toLowerCase();
+    return note.includes(lower) || tail.includes(lower) || inspector.includes(lower) || type.includes(lower);
+};
+
+const renderClipboardList = () => {
+    const list = getAllGeneralNotes();
+    const query = (clipboardSearch?.value || '').trim();
+    const filtered = query ? list.filter((item) => matchesNoteSearch(item, query)) : list;
+
+    if (!clipboardList || !clipboardEmpty) return;
+
+    if (filtered.length === 0) {
+        clipboardList.innerHTML = '';
+        clipboardList.classList.add('hidden');
+        clipboardEmpty.classList.remove('hidden');
+        return;
+    }
+
+    clipboardEmpty.classList.add('hidden');
+    clipboardList.classList.remove('hidden');
+    
+    // Sort by createdAt date (newest first)
+    const sorted = [...filtered].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateB - dateA;
+    });
+    
+    clipboardList.innerHTML = sorted
+        .map(
+            (item) => `
+        <div class="general-note-item-panel">
+            <div class="general-note-item-header">
+                <div class="general-note-item-info">
+                    <p class="general-note-item-meta">${escapeHtml(formatNoteDate(item.createdAt))}</p>
+                    ${item.inspection?.tailNumber ? `<p class="general-note-item-meta">Tail: ${escapeHtml(item.inspection.tailNumber)}</p>` : ''}
+                    ${item.inspection?.inspectorName ? `<p class="general-note-item-meta">Inspector: ${escapeHtml(item.inspection.inspectorName)}</p>` : ''}
+                    ${item.inspection?.inspectionType ? `<p class="general-note-item-meta">Type: ${escapeHtml(item.inspection.inspectionType)}</p>` : ''}
+                </div>
+                <button type="button" class="general-note-delete-btn" data-note-id="${item.id}" aria-label="Delete">×</button>
+            </div>
+            <div class="general-note-item-content">
+                <p class="general-note-text">${escapeHtml(item.note)}</p>
+            </div>
+        </div>
+        `
+        )
+        .join('');
+
+    // Add delete button handlers
+    clipboardList.querySelectorAll('.general-note-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.noteId;
+            if (!id) return;
+            if (confirm('Delete this note?')) {
+                deleteGeneralNote(id);
+                renderClipboardList();
+            }
+        });
+    });
+};
+
+const openClipboardPanel = () => {
+    clipboardPanel?.classList.add('is-open');
+    clipboardPanel?.setAttribute('aria-hidden', 'false');
+    clipboardBackdrop?.classList.remove('hidden');
+    clipboardBackdrop?.classList.add('is-visible');
+    clipboardBackdrop?.setAttribute('aria-hidden', 'false');
+    renderClipboardList();
+    clipboardSearch?.focus();
+};
+
+const closeClipboardPanel = () => {
+    clipboardPanel?.classList.remove('is-open');
+    clipboardPanel?.setAttribute('aria-hidden', 'true');
+    clipboardBackdrop?.classList.remove('is-visible');
+    clipboardBackdrop?.classList.add('hidden');
+    clipboardBackdrop?.setAttribute('aria-hidden', 'true');
+};
+
+clipboardNavBtn?.addEventListener('click', openClipboardPanel);
+clipboardPanelClose?.addEventListener('click', closeClipboardPanel);
+clipboardBackdrop?.addEventListener('click', closeClipboardPanel);
+clipboardSearch?.addEventListener('input', () => renderClipboardList());
+clipboardSearch?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeClipboardPanel();
 });
 
 // Initialize

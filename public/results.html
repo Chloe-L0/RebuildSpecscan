@@ -10,7 +10,7 @@
     <!-- Header -->
     <header class="capture-header">
         <div class="header-content">
-            <div class="logo">VERiiO</div>
+            <div class="logo" id="logoBtn" style="cursor: pointer;" title="Return to start">VERiiO</div>
             <h1 class="header-title">AIRPLANE INSPECTION CONSOLE</h1>
             <div class="header-right">
                 <div class="step-indicator">
@@ -73,8 +73,8 @@
                             <div class="viewer-meta">
                                 <div class="slider-group">
                                     <label for="thresholdSlider">Confidence</label>
-                                    <input type="range" id="thresholdSlider" min="1" max="100" value="50">
-                                    <span id="thresholdValue">50%</span>
+                                    <input type="range" id="thresholdSlider" min="0" max="100" value="1">
+                                    <span id="thresholdValue">1%</span>
                                 </div>
                                 <div class="muted" id="viewerSummary"></div>
                             </div>

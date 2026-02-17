@@ -130,6 +130,7 @@ const startOverBtn = document.getElementById('startOverBtn');
 const saveDraftBtn = document.getElementById('saveDraftBtn');
 const flagBtn = document.getElementById('flagBtn');
 const flagBtnText = document.getElementById('flagBtnText');
+const logoBtn = document.getElementById('logoBtn');
 
 let activeHighlight = null;
 
@@ -840,8 +841,13 @@ const filterDetections = (state, area, options = {}) => {
         if (!includeFalsePositives && detection.falsePositive) return false;
         // Manual detections are always included (they bypass threshold)
         if (detection.manual) return true;
-        if (typeof detection.confidence === 'number' && detection.confidence < threshold) return false;
-        return true;
+        // For confidence-based filtering: only include detections with valid confidence >= threshold
+        if (typeof detection.confidence === 'number') {
+            // Show detections with confidence >= threshold (Roboflow-style)
+            return detection.confidence >= threshold;
+        }
+        // Exclude detections without valid confidence values when filtering by threshold
+        return false;
     });
 };
 
@@ -1401,9 +1407,16 @@ const renderViewer = () => {
 
 const renderThreshold = () => {
     const state = readState();
+    // Convert threshold from decimal (0-1) to percentage (0-100)
     const thresholdPct = Math.round(state.analysis.threshold * 100);
-    thresholdSlider.value = String(thresholdPct);
-    thresholdValue.textContent = `${thresholdPct}%`;
+    // Ensure threshold is between 0 and 100
+    const clampedPct = Math.max(0, Math.min(100, thresholdPct));
+    if (thresholdSlider) {
+        thresholdSlider.value = String(clampedPct);
+    }
+    if (thresholdValue) {
+        thresholdValue.textContent = `${clampedPct}%`;
+    }
 };
 
 const render = () => {
@@ -1414,18 +1427,29 @@ const render = () => {
 
     const totalDetections = state.detections.filter((det) => !det.falsePositive).length;
     const totalPhotos = taggedPhotos(state).length;
+    const thresholdPct = Math.max(0, Math.min(100, Math.round(state.analysis.threshold * 100)));
     updateStatus(
         'Analysis complete',
         `${totalDetections} detection${totalDetections === 1 ? '' : 's'} across ${totalPhotos} tagged photo${totalPhotos === 1 ? '' : 's'}.`,
-        `Confidence ≥ ${Math.round(state.analysis.threshold * 100)}%`
+        `Confidence ≥ ${thresholdPct}%`
     );
 };
 
 thresholdSlider?.addEventListener('input', (event) => {
     const value = Number(event.target.value);
-    const normalized = Math.max(0, Math.min(100, value)) / 100;
+    // Ensure value is between 0 and 100, then convert to decimal (0-1 range)
+    const clampedValue = Math.max(0, Math.min(100, value));
+    const normalized = clampedValue / 100;
+    
+    // Update threshold in state
     setAnalysisThreshold(normalized);
-    thresholdValue.textContent = `${Math.round(normalized * 100)}%`;
+    
+    // Update display immediately for responsive feedback
+    if (thresholdValue) {
+        thresholdValue.textContent = `${clampedValue}%`;
+    }
+    
+    // Re-render to apply the new threshold filter
     render();
 });
 
@@ -1457,6 +1481,25 @@ reorganizeBtn?.addEventListener('click', () => {
 
 reportBtn?.addEventListener('click', () => {
     window.location.href = 'report.html';
+});
+
+logoBtn?.addEventListener('click', () => {
+    const currentStep = document.body.getAttribute('data-step');
+    const stepNumber = currentStep ? parseInt(currentStep, 10) : null;
+    
+    if (stepNumber === 6) {
+        // Step 6 (success page) - go directly without confirmation
+        window.location.href = 'index.html';
+    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 5) {
+        // Steps 1-5 - ask for confirmation
+        if (confirm('Are you sure you want to abandon the current inspection session? All unsaved progress will be lost.')) {
+            resetState();
+            window.location.href = 'index.html';
+        }
+    } else {
+        // Fallback - just navigate
+        window.location.href = 'index.html';
+    }
 });
 
 startOverBtn?.addEventListener('click', () => {

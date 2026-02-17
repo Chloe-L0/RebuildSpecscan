@@ -12,7 +12,7 @@
         <button class="nav-icon" title="Info">
             <span class="icon-text">ii</span>
         </button>
-        <button class="nav-icon" title="Clipboard">
+        <button class="nav-icon" id="clipboardNavBtn" title="General Notes" aria-label="Open general notes">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
             </svg>
@@ -191,6 +191,23 @@
         </div>
     </aside>
     <div class="history-panel-backdrop hidden" id="flaggedImagesBackdrop" aria-hidden="true"></div>
+
+    <!-- General Notes (Clipboard) slide-out panel -->
+    <aside id="clipboardPanel" class="history-panel" aria-hidden="true">
+        <div class="history-panel-header">
+            <h2 class="history-panel-title">General Notes</h2>
+            <button type="button" class="history-panel-close" id="clipboardPanelClose" aria-label="Close">×</button>
+        </div>
+        <div class="history-panel-search-wrap">
+            <input type="text" id="clipboardSearch" class="history-panel-search" placeholder="Search notes by content or tail number…" autocomplete="off">
+        </div>
+        <div class="history-panel-list" id="clipboardList"></div>
+        <div class="history-empty hidden" id="clipboardEmpty">
+            <p class="history-empty-title">No notes yet</p>
+            <p class="history-empty-desc">Add notes in step 6 to see them here.</p>
+        </div>
+    </aside>
+    <div class="history-panel-backdrop hidden" id="clipboardBackdrop" aria-hidden="true"></div>
 
     <script type="module" src="state.js"></script>
     <script type="module" src="start.js"></script>

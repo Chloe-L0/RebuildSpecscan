@@ -1,9 +1,11 @@
 import {
     AREAS,
     readState,
+    resetState,
     summarizeDetectionsByArea,
     updatePhotoFlaggedNote,
-    updateReportOptions
+    updateReportOptions,
+    saveGeneralNoteToStorage
 } from './state.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 import { PDFDocument, StandardFonts, rgb } from 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
@@ -43,6 +45,7 @@ const flaggedImageNotesToggle = document.getElementById('flaggedImageNotesToggle
 const reportNotesEl = document.getElementById('reportNotes');
 const flaggedImagesList = document.getElementById('flaggedImagesList');
 const flaggedImagesNotesSection = document.getElementById('flaggedImagesNotesSection');
+const logoBtn = document.getElementById('logoBtn');
 const backToResultsBtn = document.getElementById('backToResultsBtn');
 const downloadReportBtn = document.getElementById('downloadReportBtn');
 const submitInspectionBtn = document.getElementById('submitInspectionBtn');
@@ -77,10 +80,14 @@ const formatMeta = (state) => {
 const computeDetectionTotals = (state, includeFalsePositives) =>
     state.detections.filter((detection) => {
         if (!includeFalsePositives && detection.falsePositive) return false;
-        if (typeof detection.confidence === 'number' && detection.confidence < state.analysis.threshold) {
-            return false;
+        // Manual detections are always included
+        if (detection.manual) return true;
+        // For confidence-based filtering: only include detections with valid confidence >= threshold
+        if (typeof detection.confidence === 'number') {
+            return detection.confidence >= state.analysis.threshold;
         }
-        return true;
+        // Exclude detections without valid confidence values
+        return false;
     }).length;
 
 const renderSummary = () => {
@@ -1266,8 +1273,29 @@ flaggedImageNotesToggle?.addEventListener('change', (event) => {
 reportNotesEl?.addEventListener('input', () => {
     updateReportOptions({ notes: reportNotesEl.value });
 });
-reportNotesEl?.addEventListener('change', () => {
-    updateReportOptions({ notes: reportNotesEl.value });
+
+// Save note only when user leaves the field (blur event) to prevent duplicates
+// Using a debounce mechanism to avoid saving multiple times
+let saveNoteTimeout = null;
+reportNotesEl?.addEventListener('blur', () => {
+    // Clear any pending save
+    if (saveNoteTimeout) {
+        clearTimeout(saveNoteTimeout);
+    }
+    
+    // Save after a short delay to ensure we have the final value
+    saveNoteTimeout = setTimeout(() => {
+        const state = readState();
+        if (reportNotesEl.value && reportNotesEl.value.trim()) {
+            const inspectionContext = state.inspection ? {
+                tailNumber: state.inspection.tailNumber || '',
+                inspectionType: state.inspection.inspectionType || '',
+                inspectorName: state.inspection.inspectorName || '',
+                startedAt: state.inspection.startedAt || null
+            } : null;
+            saveGeneralNoteToStorage(reportNotesEl.value.trim(), inspectionContext);
+        }
+    }, 100);
 });
 
 backToResultsBtn?.addEventListener('click', () => {
@@ -1291,6 +1319,25 @@ downloadReportBtn?.addEventListener('click', async () => {
 
 submitInspectionBtn?.addEventListener('click', () => {
     window.location.href = 'success.html';
+});
+
+logoBtn?.addEventListener('click', () => {
+    const currentStep = document.body.getAttribute('data-step');
+    const stepNumber = currentStep ? parseInt(currentStep, 10) : null;
+    
+    if (stepNumber === 6) {
+        // Step 6 (success page) - go directly without confirmation
+        window.location.href = 'index.html';
+    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 5) {
+        // Steps 1-5 - ask for confirmation
+        if (confirm('Are you sure you want to abandon the current inspection session? All unsaved progress will be lost.')) {
+            resetState();
+            window.location.href = 'index.html';
+        }
+    } else {
+        // Fallback - just navigate
+        window.location.href = 'index.html';
+    }
 });
 
 const initialState = ensureAnalysisComplete();

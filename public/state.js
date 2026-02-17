@@ -101,7 +101,7 @@ const DEFAULT_STATE = {
     analysis: {
         completed: false,
         status: 'idle',
-        threshold: 0.5,
+        threshold: 0.01,
         currentArea: null,
         currentPhotoIndex: 0,
         error: null,
@@ -318,10 +318,31 @@ export const summarizeDetectionsByArea = (stateSnapshot = readState(), options =
     const counts = Object.fromEntries(AREAS.map((area) => [area, 0]));
     stateSnapshot.detections.forEach((detection) => {
         if (detection.falsePositive) return;
-        if (threshold !== undefined && !detection.manual && typeof detection.confidence === 'number' && detection.confidence < threshold) return;
-        const photo = stateSnapshot.photos.find((p) => p.id === detection.photoId);
-        if (photo?.area && counts.hasOwnProperty(photo.area)) {
-            counts[photo.area] += 1;
+        // Manual detections are always included
+        if (detection.manual) {
+            const photo = stateSnapshot.photos.find((p) => p.id === detection.photoId);
+            if (photo?.area && counts.hasOwnProperty(photo.area)) {
+                counts[photo.area] += 1;
+            }
+            return;
+        }
+        // For confidence-based filtering: only include detections with valid confidence >= threshold
+        if (threshold !== undefined) {
+            if (typeof detection.confidence === 'number' && detection.confidence >= threshold) {
+                const photo = stateSnapshot.photos.find((p) => p.id === detection.photoId);
+                if (photo?.area && counts.hasOwnProperty(photo.area)) {
+                    counts[photo.area] += 1;
+                }
+            }
+            // Exclude detections without valid confidence when threshold is set
+            return;
+        }
+        // If no threshold specified, include all detections with valid confidence
+        if (typeof detection.confidence === 'number') {
+            const photo = stateSnapshot.photos.find((p) => p.id === detection.photoId);
+            if (photo?.area && counts.hasOwnProperty(photo.area)) {
+                counts[photo.area] += 1;
+            }
         }
     });
     return counts;
@@ -541,6 +562,75 @@ export const getAllFlaggedImages = () => {
 
 export const deleteFlaggedImage = (photoId) => {
     removeFlaggedImageFromStorage(photoId);
+};
+
+// ---------------------------------------------------------------------------
+// General Notes Storage (Persistent) - localStorage
+// ---------------------------------------------------------------------------
+const GENERAL_NOTES_STORAGE_KEY = 'specscanGeneralNotes';
+
+export const saveGeneralNoteToStorage = (note, inspectionContext) => {
+    try {
+        if (!note || !note.trim()) return; // Don't save empty notes
+        
+        const existing = getAllGeneralNotes();
+        const trimmedNote = note.trim();
+        
+        // Check if this exact note already exists (same content and same inspection context)
+        // Only check notes from the last 5 minutes to allow updates if user edits
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        const recentNote = existing.find((item) => {
+            const itemTime = item.createdAt ? new Date(item.createdAt).getTime() : 0;
+            const sameContent = item.note === trimmedNote;
+            const sameContext = JSON.stringify(item.inspection) === JSON.stringify(inspectionContext);
+            const isRecent = itemTime > fiveMinutesAgo;
+            return sameContent && sameContext && isRecent;
+        });
+        
+        // If a recent duplicate exists, don't save again
+        if (recentNote) {
+            return;
+        }
+        
+        const noteId = `note-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        const noteItem = {
+            id: noteId,
+            note: trimmedNote,
+            createdAt: new Date().toISOString(),
+            inspection: inspectionContext || null
+        };
+        
+        existing.push(noteItem);
+        
+        // Keep only the last 100 notes to prevent storage issues
+        const trimmed = existing.slice(-100);
+        
+        localStorage.setItem(GENERAL_NOTES_STORAGE_KEY, JSON.stringify(trimmed));
+    } catch (e) {
+        console.warn('Failed to save general note to storage', e);
+    }
+};
+
+export const getAllGeneralNotes = () => {
+    try {
+        const raw = localStorage.getItem(GENERAL_NOTES_STORAGE_KEY);
+        if (!raw) return [];
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list : [];
+    } catch {
+        return [];
+    }
+};
+
+export const deleteGeneralNote = (noteId) => {
+    try {
+        const existing = getAllGeneralNotes();
+        const filtered = existing.filter((item) => item.id !== noteId);
+        localStorage.setItem(GENERAL_NOTES_STORAGE_KEY, JSON.stringify(filtered));
+    } catch (e) {
+        console.warn('Failed to delete general note from storage', e);
+    }
 };
 
 // Keep Netlify function warm: ping /api/health every 4 min (initial + interval), silent errors
