@@ -236,14 +236,15 @@ export const clearPhotoAreas = (photoIds) =>
         return draft;
     });
 
-export const recordDetections = ({ detections, threshold = 0.5 }) =>
+export const recordDetections = ({ detections, threshold }) =>
     updateState((draft) => {
         draft.detections = detections;
         draft.analysis = {
             ...draft.analysis,
             completed: true,
             status: 'complete',
-            threshold,
+            // Only update threshold if explicitly provided, otherwise preserve current threshold
+            threshold: threshold !== undefined ? threshold : draft.analysis.threshold,
             error: null
         };
         return draft;

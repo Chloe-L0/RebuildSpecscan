@@ -774,9 +774,10 @@ const runAnalysis = async () => {
         const deduped = [];
         byPhoto.forEach((dets) => deduped.push(...applyNms(dets, 0.5)));
 
+        // Record detections without changing the current threshold (preserve user's slider setting)
         recordDetections({
-            detections: deduped,
-            threshold: 0.5
+            detections: deduped
+            // Don't pass threshold - let recordDetections preserve the current threshold
         });
 
         const refreshed = readState();

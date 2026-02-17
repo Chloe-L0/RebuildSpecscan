@@ -199,13 +199,25 @@ app.post('/api/analyze', (req, res, next) => {
                     base64Image = base64Image.split(',').pop();
                 }
 
-                const confidencePct = req.body.confidence ?? 60;
-                const overlapPct = req.body.overlap ?? 30;
+                // Parse confidence and overlap from request body (may come as strings from FormData)
+                const confidenceRaw = req.body.confidence;
+                const confidencePct = confidenceRaw != null 
+                    ? (typeof confidenceRaw === 'number' ? confidenceRaw : parseFloat(confidenceRaw))
+                    : 1; // Default to 1% to fetch all detections, then filter in UI
+                const overlapRaw = req.body.overlap;
+                const overlapPct = overlapRaw != null
+                    ? (typeof overlapRaw === 'number' ? overlapRaw : parseFloat(overlapRaw))
+                    : 30;
+                
+                // Ensure confidence is between 0 and 100
+                const clampedConfidence = Math.max(0, Math.min(100, isNaN(confidencePct) ? 1 : confidencePct));
+                const clampedOverlap = Math.max(0, Math.min(100, isNaN(overlapPct) ? 30 : overlapPct));
+                
                 const requestConfig = {
                     params: {
                         api_key: ROBOFLOW_API_KEY,
-                        confidence: typeof confidencePct === 'number' ? confidencePct : 60,
-                        overlap: typeof overlapPct === 'number' ? overlapPct : 30
+                        confidence: clampedConfidence,
+                        overlap: clampedOverlap
                     },
                     headers: { 'Content-Type': 'application/json' },
                     maxContentLength: Infinity,

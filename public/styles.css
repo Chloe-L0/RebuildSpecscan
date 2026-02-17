@@ -1713,6 +1713,18 @@ body[data-step="7"] .capture-header {
     color: #142741;
 }
 
+/* Bookmark and Messages icons with 30% black opacity background */
+.nav-icon[title="Bookmark"],
+.nav-icon[title="Messages"] {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.nav-icon[title="Bookmark"]:hover,
+.nav-icon[title="Messages"]:hover {
+    background: rgba(0, 0, 0, 0.4);
+    color: #142741;
+}
+
 .nav-icon .icon-text {
     font-size: 18px;
     font-weight: 600;
