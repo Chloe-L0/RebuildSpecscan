@@ -6,7 +6,7 @@ import {
     resetState
 } from './state.js';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 12 * 1024 * 1024;
 
 const takePhotoBtn = document.getElementById('takePhotoBtn');
 const uploadPhotosBtn = document.getElementById('uploadPhotosBtn');
@@ -34,11 +34,52 @@ const formatInspectionMeta = (state) => {
     return `${state.inspection.inspectionType} · ${started}`;
 };
 
-const fileToDataURL = (file) =>
+const MAX_DIMENSION = 1920;
+const JPEG_QUALITY = 0.82;
+
+/** Load file as image and return compressed data URL to avoid storage quota. */
+const fileToCompressedDataURL = (file) =>
     new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
+        reader.onload = () => {
+            const dataURL = reader.result;
+            if (!dataURL || typeof dataURL !== 'string') {
+                reject(new Error('Could not read file'));
+                return;
+            }
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    let w = img.width;
+                    let h = img.height;
+                    if (w > MAX_DIMENSION || h > MAX_DIMENSION) {
+                        if (w >= h) {
+                            h = Math.round((h * MAX_DIMENSION) / w);
+                            w = MAX_DIMENSION;
+                        } else {
+                            w = Math.round((w * MAX_DIMENSION) / h);
+                            h = MAX_DIMENSION;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        resolve(dataURL);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const out = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+                    resolve(out || dataURL);
+                } catch (e) {
+                    resolve(dataURL);
+                }
+            };
+            img.onerror = () => reject(new Error('Image failed to load'));
+            img.src = dataURL;
+        };
+        reader.onerror = () => reject(reader.error || new Error('File read failed'));
         reader.readAsDataURL(file);
     });
 
@@ -142,29 +183,43 @@ const renderPhotos = () => {
     mediaGrid.appendChild(addIcon);
 };
 
+const isImageFile = (file) => {
+    if (file.size > MAX_FILE_SIZE) return false;
+    if (file.type && file.type.startsWith('image/')) return true;
+    const name = (file.name || '').toLowerCase();
+    return /\.(jpe?g|png|gif|webp|bmp)$/.test(name);
+};
+
 const processFiles = async (files) => {
     if (!files.length) return;
-    const validImages = Array.from(files).filter(
-        (file) => file.type.startsWith('image/') && file.size <= MAX_FILE_SIZE
-    );
+    const validImages = Array.from(files).filter(isImageFile);
     const rejected = files.length - validImages.length;
     if (!validImages.length) {
         if (rejected) {
-            alert('No valid images selected. Ensure files are images under 10MB.');
+            alert('No valid images selected. Use JPEG, PNG, GIF, or WebP under 12MB.');
         }
         return;
     }
 
-    const conversions = await Promise.all(validImages.map((file) => fileToDataURL(file)));
-    const newPhotos = conversions.map((dataURL, index) => ({
-        name: validImages[index].name || `image_${Date.now()}_${index + 1}.jpg`,
-        dataURL
-    }));
-    addPhotosToState(newPhotos);
-    renderPhotos();
+    try {
+        const conversions = await Promise.all(validImages.map((file) => fileToCompressedDataURL(file)));
+        const newPhotos = conversions.map((dataURL, index) => ({
+            name: validImages[index].name || `image_${Date.now()}_${index + 1}.jpg`,
+            dataURL
+        }));
+        addPhotosToState(newPhotos);
+        renderPhotos();
 
-    if (rejected > 0) {
-        alert(`${rejected} file(s) were skipped. Only image files up to 10MB are allowed.`);
+        if (rejected > 0) {
+            alert(`${rejected} file(s) were skipped. Only image files up to 12MB are allowed.`);
+        }
+    } catch (err) {
+        console.error('Upload failed', err);
+        const isQuota = err && (err.name === 'QuotaExceededError' || err.code === 22);
+        const msg = isQuota
+            ? 'Storage limit reached. Try fewer or smaller images.'
+            : (err?.message || 'Could not process the selected images. Try different files or smaller sizes.');
+        alert(msg);
     }
 };
 

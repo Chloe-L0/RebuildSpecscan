@@ -110,7 +110,8 @@ const DEFAULT_STATE = {
     report: {
         includeThumbnails: true,
         includeFalsePositives: false,
-        includeAllPhotos: true
+        includeAllPhotos: true,
+        notes: ''
     }
 };
 
@@ -371,6 +372,69 @@ export const updateDetectionBbox = (detectionId, bbox) =>
         });
         return draft;
     });
+
+// ---------------------------------------------------------------------------
+// Inspection History (Recent Reports) - localStorage
+// ---------------------------------------------------------------------------
+const HISTORY_STORAGE_KEY = 'specscanInspectionHistory';
+const HISTORY_STATE_PREFIX = 'specscanInspection_';
+const HISTORY_MAX = 20;
+
+export const getInspectionHistory = () => {
+    try {
+        const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+        if (!raw) return [];
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list : [];
+    } catch {
+        return [];
+    }
+};
+
+const setInspectionHistory = (list) => {
+    try {
+        localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(list));
+    } catch (e) {
+        console.warn('Inspection history save failed', e);
+    }
+};
+
+/** Save current inspection to history (call when user reaches success / completes). */
+export const saveInspectionToHistory = (stateSnapshot) => {
+    if (!stateSnapshot?.inspection?.tailNumber || !stateSnapshot?.inspection?.startedAt) return;
+    const id = stateSnapshot.analysis?.submissionId || `ins-${stateSnapshot.inspection.startedAt}-${Date.now()}`;
+    const list = getInspectionHistory();
+    if (list.some((item) => item.id === id)) return;
+    const entry = {
+        id,
+        tailNumber: stateSnapshot.inspection.tailNumber || '',
+        startedAt: stateSnapshot.inspection.startedAt,
+        inspectorName: stateSnapshot.inspection.inspectorName || '',
+        department: stateSnapshot.inspection.department || '',
+        inspectionType: stateSnapshot.inspection.inspectionType || 'Outbound',
+        photosCount: Array.isArray(stateSnapshot.photos) ? stateSnapshot.photos.length : 0
+    };
+    const next = [entry, ...list].slice(0, HISTORY_MAX);
+    setInspectionHistory(next);
+    try {
+        localStorage.setItem(HISTORY_STATE_PREFIX + id, JSON.stringify(stateSnapshot));
+    } catch (e) {
+        console.warn('Inspection state save failed (quota?)', e);
+    }
+};
+
+/** Load a past inspection by id and replace current state. Returns true if loaded. */
+export const loadInspectionFromHistory = (id) => {
+    try {
+        const raw = localStorage.getItem(HISTORY_STATE_PREFIX + id);
+        if (!raw) return false;
+        const parsed = JSON.parse(raw);
+        replaceState(parsed);
+        return true;
+    } catch {
+        return false;
+    }
+};
 
 // Keep Netlify function warm: ping /api/health every 4 min (initial + interval), silent errors
 const KEEPALIVE_MS = 4 * 60 * 1000;

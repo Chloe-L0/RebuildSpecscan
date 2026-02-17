@@ -17,7 +17,7 @@
                 <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
             </svg>
         </button>
-        <button class="nav-icon" title="Clock">
+        <button class="nav-icon" id="historyNavBtn" title="Inspection History" aria-label="Open inspection history">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"/>
                 <path d="M12 6v6l4 2"/>
@@ -146,6 +146,23 @@
             </div>
         </main>
     </div>
+
+    <!-- Inspection History slide-out panel -->
+    <aside id="historyPanel" class="history-panel" aria-hidden="true">
+        <div class="history-panel-header">
+            <h2 class="history-panel-title">Inspection History</h2>
+            <button type="button" class="history-panel-close" id="historyPanelClose" aria-label="Close">×</button>
+        </div>
+        <div class="history-panel-search-wrap">
+            <input type="text" id="historySearch" class="history-panel-search" placeholder="Search by tail number or date…" autocomplete="off">
+        </div>
+        <div class="history-panel-list" id="historyList"></div>
+        <div class="history-empty hidden" id="historyEmpty">
+            <p class="history-empty-title">No inspections yet</p>
+            <p class="history-empty-desc">Complete your first inspection to see it here.</p>
+        </div>
+    </aside>
+    <div class="history-panel-backdrop hidden" id="historyBackdrop" aria-hidden="true"></div>
 
     <script type="module" src="state.js"></script>
     <script type="module" src="start.js"></script>

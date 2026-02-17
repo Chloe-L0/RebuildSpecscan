@@ -1,4 +1,9 @@
-import { setInspectionDetails, readState } from './state.js';
+import {
+    setInspectionDetails,
+    readState,
+    getInspectionHistory,
+    loadInspectionFromHistory
+} from './state.js';
 
 const form = document.getElementById('startForm');
 const tailNumberInput = document.getElementById('tailNumber');
@@ -6,6 +11,13 @@ const departmentInput = document.getElementById('department');
 const inspectorNameInput = document.getElementById('inspectorName');
 const timeStartedDisplay = document.getElementById('timeStartedDisplay');
 const startButton = document.getElementById('startCaptureBtn');
+const historyNavBtn = document.getElementById('historyNavBtn');
+const historyPanel = document.getElementById('historyPanel');
+const historyPanelClose = document.getElementById('historyPanelClose');
+const historyBackdrop = document.getElementById('historyBackdrop');
+const historyList = document.getElementById('historyList');
+const historyEmpty = document.getElementById('historyEmpty');
+const historySearch = document.getElementById('historySearch');
 
 const formatDateTime = (date) =>
     date.toLocaleString(undefined, {
@@ -107,6 +119,107 @@ const handleStart = () => {
 };
 
 startButton?.addEventListener('click', handleStart);
+
+// ---------------------------------------------------------------------------
+// Inspection History panel (clock icon)
+// ---------------------------------------------------------------------------
+const formatHistoryDate = (isoString) => {
+    if (!isoString) return '—';
+    const d = new Date(isoString);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+};
+
+const matchesSearch = (entry, q) => {
+    if (!q || !q.trim()) return true;
+    const lower = q.trim().toLowerCase();
+    const tail = (entry.tailNumber || '').toLowerCase();
+    const inspector = (entry.inspectorName || '').toLowerCase();
+    const type = (entry.inspectionType || '').toLowerCase();
+    const dateStr = formatHistoryDate(entry.startedAt).toLowerCase();
+    return tail.includes(lower) || inspector.includes(lower) || type.includes(lower) || dateStr.includes(lower);
+};
+
+const renderHistoryList = () => {
+    const list = getInspectionHistory();
+    const query = (historySearch?.value || '').trim();
+    const filtered = query ? list.filter((entry) => matchesSearch(entry, query)) : list;
+
+    if (!historyList || !historyEmpty) return;
+
+    if (filtered.length === 0) {
+        historyList.innerHTML = '';
+        historyList.classList.add('hidden');
+        historyEmpty.classList.remove('hidden');
+        return;
+    }
+
+    historyEmpty.classList.add('hidden');
+    historyList.classList.remove('hidden');
+    historyList.innerHTML = filtered
+        .map(
+            (entry) => `
+        <button type="button" class="history-item" data-history-id="${entry.id}">
+            <p class="history-item-tail">${escapeHtml(entry.tailNumber || '—')}</p>
+            <p class="history-item-meta">${escapeHtml(formatHistoryDate(entry.startedAt))} · ${escapeHtml(entry.inspectorName || '—')}</p>
+            <span class="history-item-type">${escapeHtml(entry.inspectionType || 'Outbound')}</span>
+            ${entry.photosCount != null ? `<p class="history-item-meta" style="margin-top:4px">${entry.photosCount} photo${entry.photosCount === 1 ? '' : 's'}</p>` : ''}
+        </button>
+        `
+        )
+        .join('');
+
+    historyList.querySelectorAll('.history-item').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const id = btn.dataset.historyId;
+            if (!id) return;
+            if (loadInspectionFromHistory(id)) {
+                closeHistoryPanel();
+                window.location.href = 'results.html';
+            } else {
+                alert('Could not load that inspection.');
+            }
+        });
+    });
+};
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+const openHistoryPanel = () => {
+    historyPanel?.classList.add('is-open');
+    historyPanel?.setAttribute('aria-hidden', 'false');
+    historyBackdrop?.classList.remove('hidden');
+    historyBackdrop?.classList.add('is-visible');
+    historyBackdrop?.setAttribute('aria-hidden', 'false');
+    renderHistoryList();
+    historySearch?.focus();
+};
+
+const closeHistoryPanel = () => {
+    historyPanel?.classList.remove('is-open');
+    historyPanel?.setAttribute('aria-hidden', 'true');
+    historyBackdrop?.classList.remove('is-visible');
+    historyBackdrop?.classList.add('hidden');
+    historyBackdrop?.setAttribute('aria-hidden', 'true');
+};
+
+historyNavBtn?.addEventListener('click', openHistoryPanel);
+historyPanelClose?.addEventListener('click', closeHistoryPanel);
+historyBackdrop?.addEventListener('click', closeHistoryPanel);
+historySearch?.addEventListener('input', () => renderHistoryList());
+historySearch?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeHistoryPanel();
+});
 
 // Initialize
 hydrateForm();

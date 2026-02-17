@@ -37,6 +37,7 @@ const areasInspectedEl = document.getElementById('areasInspected');
 const thumbnailToggle = document.getElementById('thumbnailToggle');
 const falsePositiveToggle = document.getElementById('falsePositiveToggle');
 const allPhotosToggle = document.getElementById('allPhotosToggle');
+const reportNotesEl = document.getElementById('reportNotes');
 const backToResultsBtn = document.getElementById('backToResultsBtn');
 const downloadReportBtn = document.getElementById('downloadReportBtn');
 const submitInspectionBtn = document.getElementById('submitInspectionBtn');
@@ -107,7 +108,9 @@ const renderSummary = () => {
     if (allPhotosToggle) {
         allPhotosToggle.checked = state.report.includeAllPhotos;
     }
-
+    if (reportNotesEl) {
+        reportNotesEl.value = state.report.notes || '';
+    }
 };
 
 const filterIncludedDetections = (state) => {
@@ -332,6 +335,21 @@ const generatePdf = async () => {
     addSectionTitle('INSPECTION SCOPE');
     addKeyValue(cursor.page, 'Areas Inspected', areasInspected.length ? areasInspected.join(', ') : 'Not recorded', fonts, cursor);
     addKeyValue(cursor.page, 'Inspection Method', 'Computer Vision Analysis', fonts, cursor);
+
+    cursor.y -= 6;
+    addSectionTitle('NOTES');
+    const notesText = (state.report.notes || '').trim() || 'None';
+    ensureSpace(pdfDoc, cursor, 80);
+    const notesMaxWidth = 612 - cursor.margin * 2;
+    const notesLineHeight = 14;
+    const notesLineCount = drawWrappedText(cursor.page, notesText, cursor.margin, cursor.y, {
+        font: fonts.regular,
+        size: 12,
+        color: rgb(0.1, 0.1, 0.1),
+        maxWidth: notesMaxWidth,
+        lineHeight: notesLineHeight
+    });
+    cursor.y -= notesLineCount * notesLineHeight;
 
     cursor.y -= 12;
     addSectionTitle('AIRCRAFT SECTIONING FOR INSPECTION PROCESS');
@@ -957,6 +975,13 @@ falsePositiveToggle?.addEventListener('change', (event) => {
 allPhotosToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeAllPhotos: event.target.checked });
     renderSummary();
+});
+
+reportNotesEl?.addEventListener('input', () => {
+    updateReportOptions({ notes: reportNotesEl.value });
+});
+reportNotesEl?.addEventListener('change', () => {
+    updateReportOptions({ notes: reportNotesEl.value });
 });
 
 backToResultsBtn?.addEventListener('click', () => {
