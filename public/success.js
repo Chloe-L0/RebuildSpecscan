@@ -4,6 +4,7 @@ import { generatePdf } from './report.js';
 const reportIdEl = document.getElementById('reportId');
 const successMeta = document.getElementById('successMeta');
 const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+const backToReportBtn = document.getElementById('backToReportBtn');
 const newInspectionBtn = document.getElementById('newInspectionBtn');
 const returnHomeBtn = document.getElementById('returnHomeBtn');
 const logoBtn = document.getElementById('logoBtn');
@@ -50,6 +51,10 @@ downloadPdfBtn?.addEventListener('click', async () => {
         downloadPdfBtn.disabled = false;
         downloadPdfBtn.textContent = originalLabel;
     }
+});
+
+backToReportBtn?.addEventListener('click', () => {
+    window.location.href = 'report.html';
 });
 
 newInspectionBtn?.addEventListener('click', () => {

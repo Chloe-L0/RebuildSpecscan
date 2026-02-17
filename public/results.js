@@ -774,10 +774,15 @@ const runAnalysis = async () => {
         const deduped = [];
         byPhoto.forEach((dets) => deduped.push(...applyNms(dets, 0.5)));
 
-        // Record detections without changing the current threshold (preserve user's slider setting)
+        // Record detections and set initial threshold to 50% if still at default (1%)
+        const currentState = readState();
+        const currentThreshold = currentState.analysis.threshold;
+        // If threshold is still at default (0.01 = 1%), set it to 50% when analysis completes
+        // Otherwise preserve user's slider setting
+        const initialThreshold = currentThreshold <= 0.01 ? 0.5 : currentThreshold;
         recordDetections({
-            detections: deduped
-            // Don't pass threshold - let recordDetections preserve the current threshold
+            detections: deduped,
+            threshold: initialThreshold
         });
 
         const refreshed = readState();
