@@ -298,7 +298,7 @@ const renderFlaggedImagesList = () => {
                     <p class="flagged-image-item-meta">${escapeHtml(formatFlaggedDate(item.flaggedAt))}</p>
                     ${item.inspection?.tailNumber ? `<p class="flagged-image-item-meta">Tail: ${escapeHtml(item.inspection.tailNumber)}</p>` : ''}
                 </div>
-                <button type="button" class="flagged-image-delete-btn" data-flagged-id="${item.id}" aria-label="Delete">×</button>
+                <button type="button" class="flagged-image-delete-btn" data-flagged-id="${item.storageId || item.id}" aria-label="Delete">×</button>
             </div>
             <div class="flagged-image-item-preview">
                 <img src="${escapeHtml(item.dataURL)}" alt="Photo #${escapeHtml(item.number || '—')}" style="max-width: 100%; max-height: 200px; border-radius: 4px; object-fit: contain;">

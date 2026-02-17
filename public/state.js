@@ -399,17 +399,19 @@ export const updateDetectionBbox = (detectionId, bbox) =>
         return draft;
     });
 
-export const togglePhotoFlagged = (photoId) =>
+export const togglePhotoFlagged = (photoId) => {
+    const stateBeforeUpdate = readState();
+    const inspectionContext = stateBeforeUpdate.inspection;
     updateState((draft) => {
         draft.photos = draft.photos.map((photo) => {
             if (photo.id === photoId) {
                 const updated = { ...photo, flagged: !photo.flagged };
-                // Save to localStorage when flagged
+                // Save to localStorage when flagged (pass inspection context directly)
                 if (updated.flagged) {
-                    saveFlaggedImageToStorage(updated);
+                    saveFlaggedImageToStorage(updated, inspectionContext);
                 } else {
                     // Remove from storage when unflagged
-                    removeFlaggedImageFromStorage(photoId);
+                    removeFlaggedImageFromStorage(photoId, inspectionContext);
                 }
                 return updated;
             }
@@ -417,15 +419,18 @@ export const togglePhotoFlagged = (photoId) =>
         });
         return draft;
     });
+};
 
-export const updatePhotoFlaggedNote = (photoId, note) =>
+export const updatePhotoFlaggedNote = (photoId, note) => {
+    const stateBeforeUpdate = readState();
+    const inspectionContext = stateBeforeUpdate.inspection;
     updateState((draft) => {
         draft.photos = draft.photos.map((photo) => {
             if (photo.id === photoId) {
                 const updated = { ...photo, flaggedNote: note || '' };
-                // Update localStorage if photo is flagged
+                // Update localStorage if photo is flagged (pass inspection context directly)
                 if (updated.flagged) {
-                    saveFlaggedImageToStorage(updated);
+                    saveFlaggedImageToStorage(updated, inspectionContext);
                 }
                 return updated;
             }
@@ -433,6 +438,7 @@ export const updatePhotoFlaggedNote = (photoId, note) =>
         });
         return draft;
     });
+};
 
 // ---------------------------------------------------------------------------
 // Inspection History (Recent Reports) - localStorage
@@ -502,14 +508,53 @@ export const loadInspectionFromHistory = (id) => {
 // ---------------------------------------------------------------------------
 const FLAGGED_IMAGES_STORAGE_KEY = 'specscanFlaggedImages';
 
-const saveFlaggedImageToStorage = (photo) => {
+const saveFlaggedImageToStorage = (photo, inspectionContext = null) => {
     try {
         const existing = getAllFlaggedImages();
-        // Find if this photo already exists (by photo.id or by dataURL)
-        const index = existing.findIndex((item) => item.id === photo.id || item.dataURL === photo.dataURL);
+        // Use provided inspection context, or read from state as fallback
+        const currentInspection = inspectionContext || readState().inspection;
+        
+        // Create a unique storage ID that combines photo ID with session identifier
+        // This ensures each flagged image from each session is saved separately
+        let sessionId;
+        if (currentInspection?.startedAt) {
+            // Use startedAt as session ID (most reliable)
+            sessionId = String(currentInspection.startedAt);
+        } else if (currentInspection?.tailNumber && currentInspection?.inspectorName) {
+            // Create a stable session ID from tail number and inspector name
+            // Use a hash-like approach to ensure same session gets same ID
+            const sessionKey = `${currentInspection.tailNumber}-${currentInspection.inspectorName}`;
+            // Find if there's already a flagged image from this session to reuse its sessionId
+            const existingFromSameSession = existing.find((item) => 
+                item.inspection?.tailNumber === currentInspection.tailNumber &&
+                item.inspection?.inspectorName === currentInspection.inspectorName &&
+                !item.inspection?.startedAt
+            );
+            if (existingFromSameSession?.storageId) {
+                // Extract sessionId from existing storageId (format: "sessionId-photoId")
+                const parts = existingFromSameSession.storageId.split('-');
+                if (parts.length > 1) {
+                    // Remove the photoId part to get just the sessionId
+                    sessionId = parts.slice(0, -1).join('-');
+                } else {
+                    sessionId = sessionKey;
+                }
+            } else {
+                // First flagged image from this session - create new sessionId
+                sessionId = `${sessionKey}-${Date.now()}`;
+            }
+        } else {
+            // Last resort: use current timestamp (ensures uniqueness)
+            sessionId = String(Date.now());
+        }
+        const storageId = `${sessionId}-${photo.id}`;
+        
+        // Find if this exact photo from this exact session already exists
+        const index = existing.findIndex((item) => item.storageId === storageId);
         
         const flaggedItem = {
-            id: photo.id,
+            storageId: storageId, // Unique identifier for storage
+            id: photo.id, // Original photo ID (for reference)
             number: photo.number,
             name: photo.name,
             dataURL: photo.dataURL,
@@ -518,19 +563,20 @@ const saveFlaggedImageToStorage = (photo) => {
             flaggedNote: photo.flaggedNote || '',
             flaggedAt: new Date().toISOString(),
             // Store inspection context if available
-            inspection: readState().inspection ? {
-                tailNumber: readState().inspection.tailNumber || '',
-                inspectionType: readState().inspection.inspectionType || '',
-                inspectorName: readState().inspection.inspectorName || '',
-                startedAt: readState().inspection.startedAt || null
+            inspection: currentInspection ? {
+                tailNumber: currentInspection.tailNumber || '',
+                inspectionType: currentInspection.inspectionType || '',
+                inspectorName: currentInspection.inspectorName || '',
+                department: currentInspection.department || '',
+                startedAt: currentInspection.startedAt || null
             } : null
         };
         
         if (index >= 0) {
-            // Update existing
+            // Update existing entry (same photo from same session)
             existing[index] = { ...existing[index], ...flaggedItem };
         } else {
-            // Add new
+            // Add new entry (preserve all flagged images from all sessions)
             existing.push(flaggedItem);
         }
         
@@ -540,10 +586,38 @@ const saveFlaggedImageToStorage = (photo) => {
     }
 };
 
-const removeFlaggedImageFromStorage = (photoId) => {
+const removeFlaggedImageFromStorage = (photoId, inspectionContext = null) => {
     try {
         const existing = getAllFlaggedImages();
-        const filtered = existing.filter((item) => item.id !== photoId);
+        // Use provided inspection context, or read from state as fallback
+        const currentInspection = inspectionContext || readState().inspection;
+        
+        // Create the same storage ID to find and remove the correct entry
+        let sessionId;
+        if (currentInspection?.startedAt) {
+            sessionId = currentInspection.startedAt;
+        } else if (currentInspection?.tailNumber && currentInspection?.inspectorName) {
+            // Try to find by matching tail number and inspector (for current session)
+            sessionId = `${currentInspection.tailNumber}-${currentInspection.inspectorName}`;
+            // Remove all entries matching this pattern and photoId
+            const filtered = existing.filter((item) => {
+                const itemSessionId = item.inspection?.startedAt || 
+                    (item.inspection?.tailNumber && item.inspection?.inspectorName 
+                        ? `${item.inspection.tailNumber}-${item.inspection.inspectorName}` 
+                        : null);
+                return !(itemSessionId === sessionId && item.id === photoId);
+            });
+            localStorage.setItem(FLAGGED_IMAGES_STORAGE_KEY, JSON.stringify(filtered));
+            return;
+        } else {
+            sessionId = Date.now();
+        }
+        const storageId = `${sessionId}-${photoId}`;
+        
+        // Remove by storageId (unique per session) or fallback to photoId for backward compatibility
+        const filtered = existing.filter((item) => 
+            item.storageId !== storageId && item.id !== photoId
+        );
         localStorage.setItem(FLAGGED_IMAGES_STORAGE_KEY, JSON.stringify(filtered));
     } catch (e) {
         console.warn('Failed to remove flagged image from storage', e);
@@ -561,8 +635,17 @@ export const getAllFlaggedImages = () => {
     }
 };
 
-export const deleteFlaggedImage = (photoId) => {
-    removeFlaggedImageFromStorage(photoId);
+export const deleteFlaggedImage = (storageIdOrPhotoId) => {
+    try {
+        const existing = getAllFlaggedImages();
+        // Remove by storageId (preferred) or photoId (for backward compatibility)
+        const filtered = existing.filter((item) => 
+            item.storageId !== storageIdOrPhotoId && item.id !== storageIdOrPhotoId
+        );
+        localStorage.setItem(FLAGGED_IMAGES_STORAGE_KEY, JSON.stringify(filtered));
+    } catch (e) {
+        console.warn('Failed to delete flagged image from storage', e);
+    }
 };
 
 // ---------------------------------------------------------------------------
