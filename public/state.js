@@ -503,6 +503,23 @@ export const loadInspectionFromHistory = (id) => {
     }
 };
 
+/** Delete an inspection from history by id */
+export const deleteInspectionFromHistory = (id) => {
+    try {
+        // Remove from history list
+        const list = getInspectionHistory();
+        const filtered = list.filter((item) => item.id !== id);
+        setInspectionHistory(filtered);
+        
+        // Remove the stored state
+        localStorage.removeItem(HISTORY_STATE_PREFIX + id);
+        return true;
+    } catch (e) {
+        console.warn('Failed to delete inspection from history', e);
+        return false;
+    }
+};
+
 // ---------------------------------------------------------------------------
 // Flagged Images Storage (Persistent) - localStorage
 // ---------------------------------------------------------------------------
@@ -646,6 +663,21 @@ export const deleteFlaggedImage = (storageIdOrPhotoId) => {
     } catch (e) {
         console.warn('Failed to delete flagged image from storage', e);
     }
+};
+
+/** Save all flagged images from the current session when inspection is completed (step 6) */
+export const saveAllFlaggedImagesFromSession = (stateSnapshot) => {
+    if (!stateSnapshot?.inspection) return;
+    
+    const flaggedPhotos = stateSnapshot.photos.filter((photo) => photo.flagged);
+    if (flaggedPhotos.length === 0) return;
+    
+    const inspectionContext = stateSnapshot.inspection;
+    
+    // Save each flagged image to storage
+    flaggedPhotos.forEach((photo) => {
+        saveFlaggedImageToStorage(photo, inspectionContext);
+    });
 };
 
 // ---------------------------------------------------------------------------

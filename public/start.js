@@ -3,6 +3,7 @@ import {
     readState,
     getInspectionHistory,
     loadInspectionFromHistory,
+    deleteInspectionFromHistory,
     getAllFlaggedImages,
     deleteFlaggedImage,
     getAllGeneralNotes,
@@ -183,18 +184,25 @@ const renderHistoryList = () => {
     historyList.innerHTML = filtered
         .map(
             (entry) => `
-        <button type="button" class="history-item" data-history-id="${entry.id}">
-            <p class="history-item-tail">${escapeHtml(entry.tailNumber || '—')}</p>
-            <p class="history-item-meta">${escapeHtml(formatHistoryDate(entry.startedAt))} · ${escapeHtml(entry.inspectorName || '—')}</p>
-            <span class="history-item-type">${escapeHtml(entry.inspectionType || 'Outbound')}</span>
-            ${entry.photosCount != null ? `<p class="history-item-meta" style="margin-top:4px">${entry.photosCount} photo${entry.photosCount === 1 ? '' : 's'}</p>` : ''}
-        </button>
+        <div class="history-item-wrapper">
+            <button type="button" class="history-item" data-history-id="${entry.id}">
+                <p class="history-item-tail">${escapeHtml(entry.tailNumber || '—')}</p>
+                <p class="history-item-meta">${escapeHtml(formatHistoryDate(entry.startedAt))} · ${escapeHtml(entry.inspectorName || '—')}</p>
+                <span class="history-item-type">${escapeHtml(entry.inspectionType || 'Outbound')}</span>
+                ${entry.photosCount != null ? `<p class="history-item-meta" style="margin-top:4px">${entry.photosCount} photo${entry.photosCount === 1 ? '' : 's'}</p>` : ''}
+            </button>
+            <button type="button" class="history-item-delete-btn" data-history-id="${entry.id}" aria-label="Delete">×</button>
+        </div>
         `
         )
         .join('');
 
+    // Add click handlers for loading inspections
     historyList.querySelectorAll('.history-item').forEach((btn) => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+            // Don't trigger if clicking on delete button
+            if (e.target.closest('.history-item-delete-btn')) return;
+            
             const id = btn.dataset.historyId;
             if (!id) return;
             if (loadInspectionFromHistory(id)) {
@@ -202,6 +210,22 @@ const renderHistoryList = () => {
                 window.location.href = 'results.html';
             } else {
                 alert('Could not load that inspection.');
+            }
+        });
+    });
+    
+    // Add delete button handlers
+    historyList.querySelectorAll('.history-item-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.historyId;
+            if (!id) return;
+            if (confirm('Delete this inspection from history?')) {
+                if (deleteInspectionFromHistory(id)) {
+                    renderHistoryList();
+                } else {
+                    alert('Failed to delete inspection.');
+                }
             }
         });
     });

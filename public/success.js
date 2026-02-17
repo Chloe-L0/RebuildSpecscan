@@ -1,4 +1,4 @@
-import { generateReportId, readState, resetState, setSubmissionId, saveInspectionToHistory } from './state.js';
+import { generateReportId, readState, resetState, setSubmissionId, saveInspectionToHistory, saveAllFlaggedImagesFromSession } from './state.js';
 import { generatePdf } from './report.js';
 
 const reportIdEl = document.getElementById('reportId');
@@ -30,7 +30,11 @@ const renderSuccess = () => {
         setSubmissionId(submissionId);
     }
 
+    // Save inspection to history
     saveInspectionToHistory(state);
+    
+    // Save all flagged images from this session to the flagged images side panel
+    saveAllFlaggedImagesFromSession(state);
 
     const inspector = state.inspection.inspectorName || 'Inspector';
     const detections = state.detections.filter((detection) => !detection.falsePositive).length;
