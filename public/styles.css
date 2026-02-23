@@ -1357,11 +1357,12 @@ body[data-step="7"] .capture-header {
 }
 
 .report-footer {
+    background: #FFFFFF;
+    padding: 24px 48px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 16px;
-    padding-top: 24px;
-    border-top: 1px solid rgba(16, 18, 26, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .report-back-btn {
@@ -2833,9 +2834,9 @@ body.capture-page {
     background: #FFFFFF;
     padding: 24px 48px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 16px;
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .footer-btn {
@@ -3288,11 +3289,12 @@ body[data-step="4"] .capture-header {
 }
 
 .tag-footer {
+    background: #FFFFFF;
+    padding: 24px 48px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 16px;
-    padding-top: 24px;
-    border-top: 1px solid rgba(16, 18, 26, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .tag-back-btn {
@@ -3500,12 +3502,12 @@ body[data-step="5"] .capture-header {
 }
 
 .results-footer {
+    background: #FFFFFF;
+    padding: 24px 48px;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     gap: 16px;
-    padding-top: 24px;
-    margin-top: 24px;
-    border-top: 1px solid rgba(16, 18, 26, 0.1);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .results-back-btn {

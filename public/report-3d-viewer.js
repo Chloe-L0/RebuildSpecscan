@@ -629,5 +629,30 @@ if (document.readyState === 'loading') {
     setTimeout(initializeViewer, 50);
 }
 
-// Export function for PDF generation
+// Wait for viewer to be ready (with timeout)
+const waitForViewerReady = async (maxWait = 5000) => {
+    const startTime = Date.now();
+    while (!viewerReady || !model || !scene || !camera || !renderer || !controls) {
+        if (Date.now() - startTime > maxWait) {
+            console.warn('3D viewer not ready after timeout');
+            return false;
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return true;
+};
+
+// Enhanced capture function that waits for viewer
+const captureTechnicalViewsWithWait = async () => {
+    const isReady = await waitForViewerReady();
+    if (!isReady) {
+        console.warn('3D viewer not ready, returning empty views');
+        return { top: null, side: null, front: null };
+    }
+    return await captureTechnicalViews();
+};
+
+// Export functions for PDF generation
 window.captureTechnicalViews = captureTechnicalViews;
+window.captureTechnicalViewsWithWait = captureTechnicalViewsWithWait;
+window.waitForViewerReady = waitForViewerReady;
