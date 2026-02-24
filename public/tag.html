@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SpecScan · Tag Photos</title>
     <link rel="stylesheet" href="styles.css">
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+        }
+    }
+    </script>
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
 <body data-step="3">
@@ -97,6 +105,7 @@
 
     <script type="module" src="state.js"></script>
     <script type="module" src="tag.js"></script>
+    <script type="module" src="tag-viewer-highlight.js"></script>
 </body>
 </html>
 
