@@ -1517,15 +1517,6 @@ saveDraftBtn?.addEventListener('click', () => {
     alert('Draft saved locally. Submit or export from the Report step to finalize.');
 });
 
-// Add Manual Detection button - provides quick access
-addManualBtn?.addEventListener('click', () => {
-    // Drawing is always enabled, button just provides visual feedback
-    const viewerStage = getViewerStage();
-    if (viewerStage) {
-        viewerStage.focus();
-    }
-});
-
 // Flag button handler
 flagBtn?.addEventListener('click', () => {
     const state = readState();

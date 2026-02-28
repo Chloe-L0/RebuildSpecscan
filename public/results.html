@@ -27,13 +27,15 @@
         </div>
     </header>
 
-    <footer class="capture-footer">
-        <button class="footer-btn previous-btn" id="reorganizeBtn">PREVIOUS STEP</button>
-        <button class="footer-btn continue-btn" id="reportBtn">CONTINUE TO REPORT</button>
-    </footer>
-
     <main class="shell">
         <section class="card">
+            <div class="content-top-bar results-card-top" id="resultsCardTop">
+                <h2 class="verify-title">VERIFY DETECTIONS</h2>
+                <div class="content-actions">
+                    <button class="footer-btn previous-btn" id="reorganizeBtn">PREVIOUS STEP</button>
+                    <button class="footer-btn continue-btn" id="reportBtn">CONTINUE TO REPORT</button>
+                </div>
+            </div>
             <div class="loading hidden" id="loadingState">
                 <div class="spinner"></div>
                 <p>Running inference with Roboflow…</p>
@@ -44,7 +46,6 @@
                     <!-- Left Section: Verify Detections -->
                     <div class="results-left-section">
                         <div class="verify-detections-header">
-                            <h2 class="verify-title">VERIFY DETECTIONS</h2>
                             <p class="verify-subtitle">Validate the scanning to ensure everything is assessed correctly</p>
                         </div>
                         
@@ -58,9 +59,6 @@
                                 <div class="button-row">
                                     <button class="secondary" id="prevBtn">Previous</button>
                                     <button class="secondary" id="nextBtn">Next</button>
-                                    <button class="secondary" id="addManualBtn" title="Click and drag on image to add manual detection">
-                                        Add Manual Detection
-                                    </button>
                                     <button class="secondary" id="flagBtn" title="Flag this image as a defect that needs to be addressed">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px; vertical-align: middle;">
                                             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>

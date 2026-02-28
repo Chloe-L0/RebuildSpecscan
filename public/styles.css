@@ -198,6 +198,7 @@ a {
 }
 
 .card-header p {
+    font-size: 17px;
     color: var(--muted);
     max-width: 640px;
 }
@@ -508,6 +509,16 @@ textarea:focus {
     gap: 12px;
 }
 
+.empty-state p {
+    font-size: 17px;
+    margin: 0;
+}
+
+.empty-state small {
+    font-size: 15px;
+    margin: 0;
+}
+
 .select-grid {
     display: grid;
     gap: 20px;
@@ -798,7 +809,7 @@ textarea:focus {
     gap: 12px;
     align-items: center;
     color: var(--muted);
-    font-size: 13px;
+    font-size: 16px;
 }
 
 .slider-group {
@@ -1072,18 +1083,28 @@ body[data-step="7"] .capture-header {
     margin-bottom: 8px;
 }
 
+.report-header.content-top-bar > div:first-child {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    width: fit-content;
+}
+
 .report-title {
     font-size: 24px;
     font-weight: 700;
     color: #10121a;
     margin: 0;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
 }
 
 .report-subtitle {
-    font-size: 14px;
+    font-size: 17px;
     color: #676767;
     margin: 0;
+    text-align: center;
 }
 
 .report-main-layout {
@@ -1146,7 +1167,7 @@ body[data-step="7"] .capture-header {
 }
 
 .summary-box-desc {
-    font-size: 14px;
+    font-size: 17px;
     color: #676767;
     margin: 0;
     line-height: 1.5;
@@ -1226,7 +1247,7 @@ body[data-step="7"] .capture-header {
 }
 
 .report-notes-desc {
-    font-size: 14px;
+    font-size: 17px;
     color: #676767;
     margin: 0;
 }
@@ -1440,6 +1461,10 @@ body[data-step="7"] .capture-header {
 .success-hero h2 {
     font-size: clamp(26px, 3vw, 34px);
     font-weight: 700;
+}
+
+.success-hero .muted {
+    font-size: 17px;
 }
 
 .success-icon {
@@ -2602,7 +2627,7 @@ body.capture-page {
 }
 
 .capture-description {
-    font-size: 14px;
+    font-size: 17px;
     color: #676767;
     line-height: 1.6;
     margin: 0;
@@ -2638,7 +2663,7 @@ body.capture-page {
 }
 
 .upload-formats {
-    font-size: 12px;
+    font-size: 15px;
     color: #676767;
     margin: 0;
     text-align: center;
@@ -2833,6 +2858,40 @@ body.capture-page {
     cursor: not-allowed;
 }
 
+/* Content top bar: title left, nav buttons right (inside white card) */
+.content-top-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.content-top-bar .content-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+/* When top bar is first in card, reduce bottom margin if title section already has margin */
+.tag-header.content-top-bar {
+    margin-bottom: 32px;
+}
+
+.report-header.content-top-bar {
+    margin-bottom: 8px;
+}
+
+.results-card-top.content-top-bar {
+    margin-bottom: 16px;
+}
+
+.results-card-top .verify-title {
+    margin: 0;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .capture-header {
@@ -2875,6 +2934,20 @@ body.capture-page {
     }
     
     .footer-btn {
+        width: 100%;
+    }
+
+    .content-top-bar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .content-top-bar .content-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .content-top-bar .content-actions .footer-btn {
         width: 100%;
     }
 }
@@ -2940,7 +3013,7 @@ body[data-step="4"] .capture-header {
 }
 
 .tag-subtitle {
-    font-size: 16px;
+    font-size: 19px;
     color: #676767;
     margin: 0;
     line-height: 1.5;
@@ -3015,7 +3088,7 @@ body[data-step="4"] .capture-header {
 }
 
 .tag-assign-area .tag-photo-count {
-    font-size: 13px;
+    font-size: 16px;
     color: #676767;
     margin-top: 4px;
 }
@@ -3076,7 +3149,7 @@ body[data-step="4"] .capture-header {
 }
 
 .tag-photo-count {
-    font-size: 13px;
+    font-size: 16px;
     color: #676767;
     margin-top: 4px;
 }
@@ -3303,7 +3376,7 @@ body[data-step="5"] .capture-header {
 }
 
 .verify-subtitle {
-    font-size: 14px;
+    font-size: 17px;
     color: #676767;
     margin: 0;
     line-height: 1.5;
@@ -3376,7 +3449,7 @@ body[data-step="5"] .capture-header {
 }
 
 .summary-status p {
-    font-size: 14px;
+    font-size: 17px;
     color: #676767;
     margin: 0;
 }

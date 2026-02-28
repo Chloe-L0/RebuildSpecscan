@@ -17,8 +17,6 @@ const continueBtn = document.getElementById('continueBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const logoBtn = document.getElementById('logoBtn');
 
-let selectedPhotos = new Set();
-
 const ensureInspection = () => {
     const state = readState();
     if (!state.inspection.tailNumber || !state.inspection.startedAt) {
@@ -114,9 +112,6 @@ const renderPhotos = () => {
     state.photos.forEach((photo, index) => {
         const tile = document.createElement('div');
         tile.className = 'photo-tile';
-        if (selectedPhotos.has(photo.id)) {
-            tile.classList.add('selected');
-        }
         tile.style.position = 'relative';
         tile.dataset.photoId = photo.id;
 
@@ -142,10 +137,7 @@ const renderPhotos = () => {
             areaChip.style.borderColor = colors.border;
             areaChip.style.color = colors.text;
         }
-        const size = document.createElement('span');
-        size.style.color = '#676767';
-        size.textContent = 'Tap to tag next step';
-        foot.append(areaChip, size);
+        foot.append(areaChip);
 
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -154,18 +146,7 @@ const renderPhotos = () => {
         remove.title = 'Remove photo';
         remove.addEventListener('click', (e) => {
             e.stopPropagation();
-            selectedPhotos.delete(photo.id);
             removePhotoFromState(photo.id);
-            renderPhotos();
-        });
-
-        tile.addEventListener('click', (e) => {
-            if (e.target === remove || e.target.closest('.remove')) return;
-            if (selectedPhotos.has(photo.id)) {
-                selectedPhotos.delete(photo.id);
-            } else {
-                selectedPhotos.add(photo.id);
-            }
             renderPhotos();
         });
 

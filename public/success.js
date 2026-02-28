@@ -37,9 +37,14 @@ const renderSuccess = () => {
     saveAllFlaggedImagesFromSession(state);
 
     const inspector = state.inspection.inspectorName || 'Inspector';
-    const detections = state.detections.filter((detection) => !detection.falsePositive).length;
+    const threshold = state.analysis.threshold != null ? state.analysis.threshold : 0.01;
+    const confirmedCount = state.detections.filter((detection) => {
+        if (detection.falsePositive) return false;
+        if (detection.manual) return true;
+        return typeof detection.confidence === 'number' && detection.confidence >= threshold;
+    }).length;
     reportIdEl.textContent = submissionId;
-    successMeta.textContent = `${state.inspection.inspectionType} · ${inspector} · ${detections} confirmed detection${detections === 1 ? '' : 's'}`;
+    successMeta.textContent = `${state.inspection.inspectionType} · ${inspector} · ${confirmedCount} confirmed detection${confirmedCount === 1 ? '' : 's'}`;
 };
 
 downloadPdfBtn?.addEventListener('click', async () => {
