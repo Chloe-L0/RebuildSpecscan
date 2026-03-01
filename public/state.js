@@ -385,6 +385,14 @@ export const removeDetection = (detectionId) =>
         return draft;
     });
 
+export const restoreDetection = (detection) =>
+    updateState((draft) => {
+        if (detection && detection.id) {
+            draft.detections.push(detection);
+        }
+        return draft;
+    });
+
 export const updateDetectionBbox = (detectionId, bbox) =>
     updateState((draft) => {
         draft.detections = draft.detections.map((detection) => {
@@ -393,6 +401,28 @@ export const updateDetectionBbox = (detectionId, bbox) =>
                     ...detection,
                     bbox: { ...detection.bbox, ...bbox }
                 };
+            }
+            return detection;
+        });
+        return draft;
+    });
+
+export const updateDetectionNote = (detectionId, note) =>
+    updateState((draft) => {
+        draft.detections = draft.detections.map((detection) => {
+            if (detection.id === detectionId) {
+                return { ...detection, note: note != null ? String(note).trim() : '' };
+            }
+            return detection;
+        });
+        return draft;
+    });
+
+export const updateDetectionCritical = (detectionId, critical) =>
+    updateState((draft) => {
+        draft.detections = draft.detections.map((detection) => {
+            if (detection.id === detectionId) {
+                return { ...detection, critical: Boolean(critical) };
             }
             return detection;
         });

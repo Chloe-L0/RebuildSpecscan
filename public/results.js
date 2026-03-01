@@ -444,9 +444,9 @@ const handleMouseUp = async (event) => {
     
     const state = readState();
     const area = state.analysis.currentArea || AREAS[0];
-    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const areaPhotos = getAreaTaggedPhotos(state, area);
     if (!areaPhotos.length) return;
-    
+
     const index = state.analysis.currentPhotoIndex ?? 0;
     const currentPhoto = areaPhotos[index];
     if (!currentPhoto) return;
@@ -644,7 +644,7 @@ const handleWindowResize = () => {
     resizeTimeout = setTimeout(() => {
         const state = readState();
         const area = state.analysis.currentArea || AREAS[0];
-        const areaPhotos = state.photos.filter((photo) => photo.area === area);
+        const areaPhotos = getAreaTaggedPhotos(state, area);
         if (areaPhotos.length) {
             const index = state.analysis.currentPhotoIndex ?? 0;
             const currentPhoto = areaPhotos[index];
@@ -809,24 +809,26 @@ const runAnalysis = async () => {
 const renderTabs = (state) => {
     const counts = summarizeDetectionsByArea(state, { threshold: state.analysis.threshold });
     const activeArea = state.analysis.currentArea || AREAS[0];
+    const hasTaggedImages = (area) => state.photos.some((p) => Boolean(p.area) && p.area === area);
     areaTabs.innerHTML = '';
     AREAS.forEach((area) => {
         const tab = document.createElement('button');
         tab.type = 'button';
-        tab.className = `tab${area === activeArea ? ' active' : ''}`;
+        const isActive = area === activeArea;
+        const hasTagged = hasTaggedImages(area);
+        tab.className = `tab${isActive ? ' active' : ''}${hasTagged ? ' tagged' : ''}`;
         tab.innerHTML = `<span>${area}</span><span class="tab-count">${counts[area] || 0}</span>`;
         
-        // Apply same styling as step 4: white background with #858585 border when unselected, dark green when selected
-        if (area === activeArea) {
+        if (isActive) {
             tab.style.backgroundColor = '#2d5016';
             tab.style.borderColor = '#2d5016';
             tab.style.color = '#ffffff';
             tab.style.boxShadow = '0 8px 20px rgba(45, 80, 22, 0.3)';
         } else {
-            tab.style.backgroundColor = '#ffffff';
-            tab.style.borderColor = '#858585';
-            tab.style.color = '#10121a';
-            tab.style.boxShadow = 'none';
+            tab.style.backgroundColor = '';
+            tab.style.borderColor = '';
+            tab.style.color = '';
+            tab.style.boxShadow = '';
         }
         
         tab.addEventListener('click', () => {
@@ -855,6 +857,11 @@ const filterDetections = (state, area, options = {}) => {
         // Exclude detections without valid confidence values when filtering by threshold
         return false;
     });
+};
+
+/** All photos tagged to this area (shown in viewer so user can add manual detections even when zero findings) */
+const getAreaTaggedPhotos = (state, area) => {
+    return state.photos.filter((photo) => photo.area === area);
 };
 
 const renderOverlay = (state, photo) => {
@@ -1323,7 +1330,7 @@ const updateCursor = (event) => {
 const renderViewer = () => {
     const state = readState();
     const area = state.analysis.currentArea || AREAS[0];
-    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const areaPhotos = getAreaTaggedPhotos(state, area);
 
     if (!areaPhotos.length) {
         resultImage.removeAttribute('src');
@@ -1405,8 +1412,9 @@ const renderViewer = () => {
         }
     }
 
-    prevBtn.disabled = index === 0;
-    nextBtn.disabled = index === areaPhotos.length - 1;
+    const singleOrNone = areaPhotos.length <= 1;
+    prevBtn.disabled = singleOrNone || index === 0;
+    nextBtn.disabled = singleOrNone || index === areaPhotos.length - 1;
 
     renderDetectionList(state, area, currentPhoto);
 };
@@ -1462,7 +1470,7 @@ thresholdSlider?.addEventListener('input', (event) => {
 prevBtn?.addEventListener('click', () => {
     const state = readState();
     const area = state.analysis.currentArea || AREAS[0];
-    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const areaPhotos = getAreaTaggedPhotos(state, area);
     const nextIndex = Math.max(0, (state.analysis.currentPhotoIndex ?? 0) - 1);
     if (areaPhotos.length) {
         setCurrentPhotoIndex(nextIndex);
@@ -1473,7 +1481,7 @@ prevBtn?.addEventListener('click', () => {
 nextBtn?.addEventListener('click', () => {
     const state = readState();
     const area = state.analysis.currentArea || AREAS[0];
-    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const areaPhotos = getAreaTaggedPhotos(state, area);
     const nextIndex = Math.min(areaPhotos.length - 1, (state.analysis.currentPhotoIndex ?? 0) + 1);
     if (areaPhotos.length) {
         setCurrentPhotoIndex(nextIndex);
@@ -1521,7 +1529,7 @@ saveDraftBtn?.addEventListener('click', () => {
 flagBtn?.addEventListener('click', () => {
     const state = readState();
     const area = state.analysis.currentArea || AREAS[0];
-    const areaPhotos = state.photos.filter((photo) => photo.area === area);
+    const areaPhotos = getAreaTaggedPhotos(state, area);
     const index = state.analysis.currentPhotoIndex ?? 0;
     const currentPhoto = areaPhotos[index];
     if (currentPhoto) {

@@ -1,8 +1,12 @@
 import {
     AREAS,
     readState,
+    removeDetection,
+    restoreDetection,
     resetState,
     summarizeDetectionsByArea,
+    updateDetectionCritical,
+    updateDetectionNote,
     updatePhotoFlaggedNote,
     updateReportOptions,
     saveGeneralNoteToStorage
@@ -34,9 +38,10 @@ const getColorForClass = (className) => {
 };
 
 const reportTailNumber = document.getElementById('reportTailNumber');
-const totalPhotosEl = document.getElementById('totalPhotos');
-const totalDetectionsEl = document.getElementById('totalDetections');
-const areasInspectedEl = document.getElementById('areasInspected');
+const reportEditorMeta = document.getElementById('reportEditorMeta');
+const reportFindingsList = document.getElementById('reportFindingsList');
+const reportBulkDeleteBtn = document.getElementById('reportBulkDeleteBtn');
+const generateFinalReportBtn = document.getElementById('generateFinalReportBtn');
 const thumbnailToggle = document.getElementById('thumbnailToggle');
 const falsePositiveToggle = document.getElementById('falsePositiveToggle');
 const allPhotosToggle = document.getElementById('allPhotosToggle');
@@ -47,8 +52,9 @@ const flaggedImagesList = document.getElementById('flaggedImagesList');
 const flaggedImagesNotesSection = document.getElementById('flaggedImagesNotesSection');
 const logoBtn = document.getElementById('logoBtn');
 const backToResultsBtn = document.getElementById('backToResultsBtn');
-const downloadReportBtn = document.getElementById('downloadReportBtn');
 const submitInspectionBtn = document.getElementById('submitInspectionBtn');
+
+const dispatchReportStateChanged = () => window.dispatchEvent(new CustomEvent('report-state-changed'));
 
 const ensureAnalysisComplete = () => {
     const state = readState();
@@ -93,21 +99,13 @@ const computeDetectionTotals = (state, includeFalsePositives) =>
 const renderSummary = () => {
     const state = readState();
     const tagged = state.photos.filter((photo) => Boolean(photo.area));
-    const inspectedAreas = new Set(tagged.map((photo) => photo.area));
-    const detectionCount = computeDetectionTotals(state, state.report.includeFalsePositives);
 
     if (reportTailNumber) {
         const tailNumber = state.inspection.tailNumber || '--';
         reportTailNumber.textContent = `Tail ${tailNumber}`;
     }
-    if (totalPhotosEl) {
-        totalPhotosEl.textContent = tagged.length.toString();
-    }
-    if (totalDetectionsEl) {
-        totalDetectionsEl.textContent = detectionCount.toString();
-    }
-    if (areasInspectedEl) {
-        areasInspectedEl.textContent = inspectedAreas.size.toString();
+    if (reportEditorMeta) {
+        reportEditorMeta.textContent = formatMeta(state);
     }
 
     // Update toggles
@@ -130,8 +128,8 @@ const renderSummary = () => {
         reportNotesEl.value = state.report.notes || '';
     }
     
-    // Render flagged images with notes
     renderFlaggedImagesNotes();
+    renderFindingsList();
 };
 
 const renderFlaggedImagesNotes = () => {
@@ -202,6 +200,417 @@ const renderFlaggedImagesNotes = () => {
         item.appendChild(thumbnail);
         item.appendChild(content);
         flaggedImagesList.appendChild(item);
+    });
+};
+
+// Line-style icons (stroke 2, 24x24)
+const FINDING_ICONS = {
+    chevronDown: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>',
+    chevronUp: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>',
+    flag: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>',
+    eye: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+    trash: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>'
+};
+
+let selectedFindingIds = new Set();
+let expandedFindingId = null;
+let lastDeletedDetection = null;
+let undoToastTimer = null;
+const NOTE_SAVE_DEBOUNCE_MS = 1000;
+
+const reportFindingsBulkBar = document.getElementById('reportFindingsBulkBar');
+const reportFindingsBulkCount = document.getElementById('reportFindingsBulkCount');
+const reportBulkFlagBtn = document.getElementById('reportBulkFlagBtn');
+const reportBulkClearBtn = document.getElementById('reportBulkClearBtn');
+const reportFindingsToast = document.getElementById('reportFindingsToast');
+const reportFindingsToastUndo = document.getElementById('reportFindingsToastUndo');
+const findingDetailModal = document.getElementById('findingDetailModal');
+const findingDetailModalBackdrop = document.getElementById('findingDetailModalBackdrop');
+const findingDetailModalClose = document.getElementById('findingDetailModalClose');
+const findingDetailModalTitle = document.getElementById('findingDetailModalTitle');
+const findingDetailModalMeta = document.getElementById('findingDetailModalMeta');
+const findingDetailModalImageWrap = document.getElementById('findingDetailModalImageWrap');
+const findingDetailModalImage = document.getElementById('findingDetailModalImage');
+const findingDetailModalOverlay = document.getElementById('findingDetailModalOverlay');
+
+function updateBulkBar() {
+    const n = selectedFindingIds.size;
+    if (!reportFindingsBulkBar || !reportFindingsBulkCount) return;
+    reportFindingsBulkBar.classList.toggle('hidden', n === 0);
+    reportFindingsBulkCount.textContent = n === 1 ? '1 selected' : `${n} selected`;
+}
+
+let pinchZoomInitialDistance = null;
+let pinchZoomInitialScale = 1;
+let pinchZoomCurrentScale = 1;
+
+function getTouchDistance(touches) {
+    if (touches.length < 2) return 0;
+    const a = touches[0];
+    const b = touches[1];
+    return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+}
+
+function openFindingDetailModal(photo, detection, findingId) {
+    if (!findingDetailModal || !findingDetailModalImage || !findingDetailModalOverlay) return;
+    const wrap = findingDetailModalImageWrap;
+    if (wrap && wrap._pinchHandlers) {
+        wrap.removeEventListener('touchstart', wrap._pinchHandlers.onPinchStart);
+        wrap.removeEventListener('touchmove', wrap._pinchHandlers.onPinchMove);
+        wrap.removeEventListener('touchend', wrap._pinchHandlers.onPinchEnd);
+        wrap._pinchHandlers = null;
+    }
+    const bbox = detection?.bbox || {};
+    const confidence = detection?.manual ? 'Manual' : (typeof detection?.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : '—');
+    const type = (detection?.class || 'Defect').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    findingDetailModalTitle.textContent = findingId;
+    findingDetailModalMeta.innerHTML = `
+        <span><strong>Type:</strong> ${type}</span>
+        <span><strong>Location:</strong> ${detection?.area || '—'} · Photo #${detection?.photoNumber ?? '—'}</span>
+        <span><strong>Confidence:</strong> ${confidence}</span>`;
+    findingDetailModalImage.alt = `${findingId} – full resolution`;
+    findingDetailModalImage.src = photo?.dataURL || '';
+    findingDetailModalOverlay.innerHTML = '';
+    pinchZoomCurrentScale = 1;
+    findingDetailModalImage.style.transform = 'scale(1)';
+
+    function positionBbox() {
+        findingDetailModalOverlay.innerHTML = '';
+        const img = findingDetailModalImage;
+        const rect = img.getBoundingClientRect();
+        const wrapRect = findingDetailModalImageWrap?.getBoundingClientRect();
+        if (!wrapRect || rect.width === 0 || rect.height === 0) return;
+        const sourceWidth = bbox.imageWidth || img.naturalWidth || 1;
+        const sourceHeight = bbox.imageHeight || img.naturalHeight || 1;
+        const centerX = bbox.centerX ?? bbox.x ?? 0;
+        const centerY = bbox.centerY ?? bbox.y ?? 0;
+        const w = bbox.width ?? bbox.w ?? 0;
+        const h = bbox.height ?? bbox.h ?? 0;
+        const scaleX = rect.width / sourceWidth;
+        const scaleY = rect.height / sourceHeight;
+        const left = (centerX - w / 2) * scaleX;
+        const top = (centerY - h / 2) * scaleY;
+        const boxW = w * scaleX;
+        const boxH = h * scaleY;
+        const box = document.createElement('div');
+        box.className = 'finding-detail-modal-bbox';
+        box.style.left = `${left}px`;
+        box.style.top = `${top}px`;
+        box.style.width = `${boxW}px`;
+        box.style.height = `${boxH}px`;
+        findingDetailModalOverlay.style.left = `${rect.left - wrapRect.left}px`;
+        findingDetailModalOverlay.style.top = `${rect.top - wrapRect.top}px`;
+        findingDetailModalOverlay.style.width = `${rect.width}px`;
+        findingDetailModalOverlay.style.height = `${rect.height}px`;
+        findingDetailModalOverlay.appendChild(box);
+    }
+
+    findingDetailModalImage.onload = () => {
+        positionBbox();
+        setTimeout(positionBbox, 50);
+    };
+    if (findingDetailModalImage.complete && findingDetailModalImage.naturalWidth) {
+        positionBbox();
+    }
+
+    const resizeHandler = () => {
+        if (findingDetailModal.classList.contains('hidden')) return;
+        positionBbox();
+    };
+    window.addEventListener('resize', resizeHandler);
+    findingDetailModal._resizeHandler = resizeHandler;
+
+    findingDetailModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    const onPinchStart = (e) => {
+        if (e.touches.length === 2) {
+            pinchZoomInitialDistance = getTouchDistance(e.touches);
+            pinchZoomInitialScale = pinchZoomCurrentScale;
+        }
+    };
+    const onPinchMove = (e) => {
+        if (e.touches.length === 2 && pinchZoomInitialDistance != null) {
+            e.preventDefault();
+            const dist = getTouchDistance(e.touches);
+            const scale = (dist / pinchZoomInitialDistance) * pinchZoomInitialScale;
+            pinchZoomCurrentScale = Math.max(0.5, Math.min(4, scale));
+            findingDetailModalImage.style.transform = `scale(${pinchZoomCurrentScale})`;
+        }
+    };
+    const onPinchEnd = (e) => {
+        if (e.touches.length < 2) pinchZoomInitialDistance = null;
+    };
+    findingDetailModalImageWrap.addEventListener('touchstart', onPinchStart, { passive: true });
+    findingDetailModalImageWrap.addEventListener('touchmove', onPinchMove, { passive: false });
+    findingDetailModalImageWrap.addEventListener('touchend', onPinchEnd, { passive: true });
+    findingDetailModalImageWrap._pinchHandlers = { onPinchStart, onPinchMove, onPinchEnd };
+}
+
+function closeFindingDetailModal() {
+    if (!findingDetailModal) return;
+    findingDetailModal.classList.add('hidden');
+    document.body.style.overflow = '';
+    if (findingDetailModal._resizeHandler) {
+        window.removeEventListener('resize', findingDetailModal._resizeHandler);
+        findingDetailModal._resizeHandler = null;
+    }
+    const wrap = findingDetailModalImageWrap;
+    if (wrap && wrap._pinchHandlers) {
+        wrap.removeEventListener('touchstart', wrap._pinchHandlers.onPinchStart);
+        wrap.removeEventListener('touchmove', wrap._pinchHandlers.onPinchMove);
+        wrap.removeEventListener('touchend', wrap._pinchHandlers.onPinchEnd);
+        wrap._pinchHandlers = null;
+    }
+}
+
+function showUndoToast(deletedDetection) {
+    lastDeletedDetection = deletedDetection;
+    if (undoToastTimer) clearTimeout(undoToastTimer);
+    if (reportFindingsToast) {
+        reportFindingsToast.classList.remove('hidden');
+        const text = reportFindingsToast.querySelector('.report-findings-toast-text');
+        if (text) text.textContent = 'Finding deleted.';
+    }
+    undoToastTimer = setTimeout(() => {
+        lastDeletedDetection = null;
+        if (reportFindingsToast) reportFindingsToast.classList.add('hidden');
+    }, 5000);
+}
+
+function hideUndoToast() {
+    if (undoToastTimer) clearTimeout(undoToastTimer);
+    undoToastTimer = null;
+    lastDeletedDetection = null;
+    if (reportFindingsToast) reportFindingsToast.classList.add('hidden');
+}
+
+reportFindingsToastUndo?.addEventListener('click', () => {
+    if (lastDeletedDetection) {
+        restoreDetection(lastDeletedDetection);
+        hideUndoToast();
+        renderSummary();
+        dispatchReportStateChanged();
+    }
+});
+
+reportBulkFlagBtn?.addEventListener('click', () => {
+    selectedFindingIds.forEach((id) => updateDetectionCritical(id, true));
+    renderSummary();
+    dispatchReportStateChanged();
+});
+reportBulkDeleteBtn?.addEventListener('click', () => {
+    const toDelete = Array.from(selectedFindingIds);
+    if (toDelete.length === 0) return;
+    const state = readState();
+    const first = state.detections.find((d) => d.id === toDelete[0]);
+    toDelete.forEach((id) => removeDetection(id));
+    selectedFindingIds.clear();
+    updateBulkBar();
+    if (first) showUndoToast(first);
+    renderSummary();
+    dispatchReportStateChanged();
+});
+reportBulkClearBtn?.addEventListener('click', () => {
+    selectedFindingIds.clear();
+    updateBulkBar();
+    renderFindingsList();
+});
+
+function initBulkBarIcons() {
+    const flagIcon = document.querySelector('#reportBulkFlagBtn .report-finding-icon[data-icon="flag"]');
+    const trashIcon = document.querySelector('#reportBulkDeleteBtn .report-finding-icon[data-icon="trash"]');
+    if (flagIcon) flagIcon.innerHTML = FINDING_ICONS.flag;
+    if (trashIcon) trashIcon.innerHTML = FINDING_ICONS.trash;
+}
+initBulkBarIcons();
+
+findingDetailModalClose?.addEventListener('click', closeFindingDetailModal);
+findingDetailModalBackdrop?.addEventListener('click', closeFindingDetailModal);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && findingDetailModal && !findingDetailModal.classList.contains('hidden')) {
+        closeFindingDetailModal();
+    }
+});
+
+document.addEventListener('click', (e) => {
+    if (expandedFindingId && !e.target.closest('.report-finding-card')) {
+        expandedFindingId = null;
+        reportFindingsList?.querySelectorAll('.report-finding-card').forEach((c) => c.classList.remove('report-finding-card-expanded'));
+    }
+});
+
+const renderFindingsList = () => {
+    const state = readState();
+    const included = filterIncludedDetections(state);
+    if (!reportFindingsList) return;
+    reportFindingsList.innerHTML = '';
+    updateBulkBar();
+
+    included.forEach((detection, index) => {
+        const photo = state.photos.find((p) => p.id === detection.photoId);
+        const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : '—');
+        const findingId = `F-${String(index + 1).padStart(3, '0')}`;
+        const safeType = (detection.class || 'Defect').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const isExpanded = expandedFindingId === detection.id;
+        const isSelected = selectedFindingIds.has(detection.id);
+        const isFlagged = Boolean(detection.critical);
+
+        const card = document.createElement('div');
+        card.className = 'report-finding-card';
+        card.dataset.detectionId = detection.id;
+        card.dataset.findingIndex = String(index);
+        if (isExpanded) card.classList.add('report-finding-card-expanded');
+        if (isSelected) card.classList.add('report-finding-card-selected');
+        if (isFlagged) card.classList.add('report-finding-card-flagged');
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-expanded', String(isExpanded));
+
+        const collapsedHtml = `
+            <div class="report-finding-card-collapsed">
+                <label class="report-finding-check" onclick="event.stopPropagation()">
+                    <input type="checkbox" class="report-finding-cb" data-id="${detection.id}" ${isSelected ? 'checked' : ''} aria-label="Select finding">
+                </label>
+                <div class="report-finding-thumb report-finding-thumb-sm" data-id="${detection.id}"></div>
+                <div class="report-finding-summary">
+                    <span class="report-finding-id">${findingId}</span>
+                    <span class="report-finding-type">${safeType}</span>
+                    <span class="report-finding-loc">${(detection.area || '—')} · Photo #${detection.photoNumber || '—'}</span>
+                    <span class="report-finding-conf">${confidence}</span>
+                </div>
+                <span class="report-finding-chevron" aria-hidden="true">${FINDING_ICONS.chevronDown}</span>
+            </div>
+            <div class="report-finding-card-expanded-content">
+                <div class="report-finding-expanded-thumb" data-id="${detection.id}"></div>
+                <div class="report-finding-expanded-body">
+                    <div class="report-finding-expanded-meta">
+                        <span class="report-finding-id">${findingId}</span>
+                        <span class="report-finding-type">${safeType}</span>
+                        <span class="report-finding-loc">${(detection.area || '—')} · Photo #${detection.photoNumber || '—'}</span>
+                        <span class="report-finding-conf">${confidence}</span>
+                    </div>
+                    <label class="report-finding-notes-label">Notes</label>
+                    <textarea class="report-finding-notes" data-id="${detection.id}" placeholder="Add notes…" rows="3" aria-label="Notes for finding"></textarea>
+                    <div class="report-finding-notes-saved hidden" aria-live="polite">Saved</div>
+                    <div class="report-finding-actions">
+                        <button type="button" class="report-finding-action-btn" data-action="flag" data-id="${detection.id}" title="Flag as critical">
+                            <span class="report-finding-icon">${FINDING_ICONS.flag}</span>
+                            <span>Flag as Critical</span>
+                        </button>
+                        <button type="button" class="report-finding-action-btn" data-action="view" data-id="${detection.id}" data-index="${index}" title="View in report">
+                            <span class="report-finding-icon">${FINDING_ICONS.eye}</span>
+                            <span>View Detail</span>
+                        </button>
+                        <button type="button" class="report-finding-action-btn report-finding-action-delete" data-action="delete" data-id="${detection.id}" title="Delete finding">
+                            <span class="report-finding-icon">${FINDING_ICONS.trash}</span>
+                            <span>Delete</span>
+                        </button>
+                    </div>
+                </div>
+                <span class="report-finding-chevron report-finding-chevron-up" aria-hidden="true">${FINDING_ICONS.chevronUp}</span>
+            </div>`;
+        card.innerHTML = collapsedHtml;
+
+        const thumbSm = card.querySelector('.report-finding-thumb-sm');
+        const thumbLg = card.querySelector('.report-finding-expanded-thumb');
+        const loadThumb = (el, size) => {
+            if (!photo?.dataURL || !detection.bbox || !el) return;
+            createCroppedThumbnail(photo.dataURL, detection.bbox, size).then((r) => {
+                const img = document.createElement('img');
+                img.src = r.src;
+                img.alt = findingId;
+                el.appendChild(img);
+            });
+        };
+        loadThumb(thumbSm, 56);
+        loadThumb(thumbLg, 120);
+
+        const notesEl = card.querySelector('.report-finding-notes');
+        const savedEl = card.querySelector('.report-finding-notes-saved');
+        notesEl.value = detection.note || '';
+        let noteDebounce = null;
+        notesEl.addEventListener('input', () => {
+            if (noteDebounce) clearTimeout(noteDebounce);
+            if (savedEl) savedEl.classList.add('hidden');
+            noteDebounce = setTimeout(() => {
+                updateDetectionNote(detection.id, notesEl.value);
+                if (savedEl) {
+                    savedEl.classList.remove('hidden');
+                    setTimeout(() => savedEl.classList.add('hidden'), 2000);
+                }
+                dispatchReportStateChanged();
+            }, NOTE_SAVE_DEBOUNCE_MS);
+        });
+
+        const cb = card.querySelector('.report-finding-cb');
+        cb.addEventListener('change', (e) => {
+            e.stopPropagation();
+            const id = e.target.dataset.id;
+            if (e.target.checked) selectedFindingIds.add(id); else selectedFindingIds.delete(id);
+            updateBulkBar();
+            card.classList.toggle('report-finding-card-selected', selectedFindingIds.has(id));
+        });
+
+        card.querySelectorAll('.report-finding-action-btn').forEach((btn) => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                const action = btn.dataset.action;
+                if (action === 'flag') {
+                    updateDetectionCritical(id, true);
+                    card.classList.add('report-finding-card-flagged');
+                    dispatchReportStateChanged();
+                } else if (action === 'view') {
+                    const det = readState().detections.find((d) => d.id === id);
+                    const ph = readState().photos.find((p) => p.id === det?.photoId);
+                    const idx = parseInt(btn.dataset.index, 10);
+                    const findingId = `F-${String(idx + 1).padStart(3, '0')}`;
+                    if (ph && det) openFindingDetailModal(ph, det, findingId);
+                } else if (action === 'delete') {
+                    const det = readState().detections.find((d) => d.id === id);
+                    removeDetection(id);
+                    selectedFindingIds.delete(id);
+                    if (det) showUndoToast(det);
+                    renderSummary();
+                    dispatchReportStateChanged();
+                }
+            });
+        });
+
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('label') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('.report-finding-action-btn')) return;
+            const id = card.dataset.detectionId;
+            const willExpand = expandedFindingId !== id;
+            expandedFindingId = willExpand ? id : null;
+            reportFindingsList.querySelectorAll('.report-finding-card').forEach((c) => {
+                c.classList.remove('report-finding-card-expanded');
+                c.setAttribute('aria-expanded', 'false');
+            });
+            if (willExpand) {
+                card.classList.add('report-finding-card-expanded');
+                card.setAttribute('aria-expanded', 'true');
+                requestAnimationFrame(() => {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                });
+            }
+        });
+
+        card.addEventListener('keydown', (e) => {
+            if (e.target.matches('textarea, input') || e.target.closest('textarea, input')) {
+                return;
+            }
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                card.click();
+            }
+            if (e.key === 'Delete' && card.classList.contains('report-finding-card-expanded')) {
+                const delBtn = card.querySelector('[data-action="delete"]');
+                if (delBtn) delBtn.click();
+            }
+        });
+
+        reportFindingsList.appendChild(card);
     });
 };
 
@@ -352,13 +761,13 @@ const drawWrappedText = (page, text, x, y, options) => {
 
 const addKeyValue = (page, key, value, fonts, cursor) => {
     const keyX = cursor.margin;
-    const valueX = cursor.margin + 130;
-    const maxWidth = 612 - cursor.margin - valueX;
-    const lineHeight = 14;
-    page.drawText(`${key}:`, { x: keyX, y: cursor.y, size: 12, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+    const valueX = cursor.margin + 140;
+    const maxWidth = (cursor.pageWidth || 612) - cursor.margin - valueX;
+    const lineHeight = Math.round(PDF_LAYOUT.bodySize * PDF_LAYOUT.lineHeight);
+    page.drawText(`${key}:`, { x: keyX, y: cursor.y, size: PDF_LAYOUT.bodySize, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
     const lineCount = drawWrappedText(page, value, valueX, cursor.y, {
         font: fonts.regular,
-        size: 12,
+        size: PDF_LAYOUT.bodySize,
         color: rgb(0.1, 0.1, 0.1),
         maxWidth,
         lineHeight
@@ -368,230 +777,338 @@ const addKeyValue = (page, key, value, fonts, cursor) => {
 
 const ensureSpace = (pdfDoc, cursor, needed) => {
     if (cursor.y - needed <= cursor.margin) {
-        cursor.page = pdfDoc.addPage([612, 792]);
-        cursor.y = 792 - cursor.margin;
+        cursor.page = pdfDoc.addPage([cursor.pageWidth, cursor.pageHeight]);
+        cursor.y = cursor.pageHeight - cursor.margin;
     }
 };
 
-const generatePdf = async () => {
+// A4, 1" margins, typography (natural Title Case, reduced size spread)
+const PDF_LAYOUT = {
+    pageWidth: 612,
+    pageHeight: 792,
+    margin: 72,
+    titleSize: 22,
+    sectionSize: 16,
+    subsectionSize: 13,
+    bodySize: 11,
+    captionSize: 9,
+    lineHeight: 1.2,
+    gapSection: 24,
+    gapParagraph: 12,
+    gapSubsection: 16,
+    gapItem: 12,
+    tableHeaderBg: 0.898,
+    tableRowAlt: 0.976,
+    tableBorder: 0.8,
+    captionGray: 0.4,
+    cellPadH: 12,
+    cellPadV: 8,
+    tableRowGap: 8
+};
+
+const addHeaderAndFooter = (pdfDoc, fonts, state) => {
+    const pages = pdfDoc.getPages();
+    const totalPages = pages.length;
+    if (totalPages === 0) return;
+    const insp = (state && state.inspection) || {};
+    const tail = insp.tailNumber || '—';
+    const dateStr = insp.startedAt
+        ? new Date(insp.startedAt).toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/-/g, '-')
+        : '—';
+    const inspector = insp.inspectorName || '—';
+    const dept = (insp.department || 'Maintenance QA').trim();
+    const { margin, pageHeight, pageWidth } = PDF_LAYOUT;
+    const gray = rgb(0.25, 0.25, 0.25);
+    for (let i = 0; i < totalPages; i++) {
+        const page = pages[i];
+        const pageNum = i + 1;
+        if (i > 0) {
+            page.drawText('Aircraft Inspection Report', {
+                x: margin,
+                y: pageHeight - margin + 10,
+                size: 10,
+                font: fonts.bold,
+                color: gray
+            });
+            page.drawText(`Tail: ${tail} | Date: ${dateStr}`, {
+                x: margin,
+                y: pageHeight - margin,
+                size: 9,
+                font: fonts.regular,
+                color: gray
+            });
+        }
+        page.drawText(`Inspector: ${inspector} | ${dept}`, {
+            x: margin,
+            y: margin - 16,
+            size: 9,
+            font: fonts.regular,
+            color: gray
+        });
+        page.drawText(`Page ${pageNum} of ${totalPages}`, {
+            x: pageWidth - margin - fonts.regular.widthOfTextAtSize(`Page ${pageNum} of ${totalPages}`, 9),
+            y: margin - 16,
+            size: 9,
+            font: fonts.regular,
+            color: gray
+        });
+    }
+};
+
+const drawTable = (page, fonts, cursor, columns, rows, options = {}) => {
+    const { headerBg = PDF_LAYOUT.tableHeaderBg, rowAlt = PDF_LAYOUT.tableRowAlt, border = PDF_LAYOUT.tableBorder } = options;
+    const lineH = PDF_LAYOUT.bodySize + 2;
+    const cellPadH = PDF_LAYOUT.cellPadH;
+    const cellPadV = PDF_LAYOUT.cellPadV;
+    const rowGap = PDF_LAYOUT.tableRowGap || 4;
+    const margin = PDF_LAYOUT.margin;
+    const pageWidth = PDF_LAYOUT.pageWidth;
+    const tableWidth = pageWidth - margin * 2;
+    let y = cursor.y;
+    const rowHeight = lineH + cellPadV * 2 + rowGap;
+    const gray = rgb(0.1, 0.1, 0.1);
+    const borderColor = rgb(border, border, border);
+    let colX = margin;
+    columns.forEach((col) => {
+        col.x = colX;
+        colX += col.width;
+    });
+    const startX = margin;
+    y -= rowHeight;
+    page.drawRectangle({
+        x: startX,
+        y: y,
+        width: tableWidth,
+        height: rowHeight,
+        color: rgb(headerBg, headerBg, headerBg),
+        borderColor,
+        borderWidth: 1
+    });
+    columns.forEach((col) => {
+        const label = (col.label != null) ? String(col.label) : '';
+        const alignRight = col.align === 'right';
+        const x = alignRight ? col.x + col.width - cellPadH - fonts.bold.widthOfTextAtSize(label, PDF_LAYOUT.bodySize) : col.x + cellPadH;
+        page.drawText(label, { x, y: y + cellPadV + 2, size: PDF_LAYOUT.bodySize, font: fonts.bold, color: gray });
+    });
+    y -= rowHeight;
+    rows.forEach((row, idx) => {
+        const bg = idx % 2 === 1 ? rgb(rowAlt, rowAlt, rowAlt) : undefined;
+        if (bg) {
+            page.drawRectangle({
+                x: startX,
+                y: y - rowHeight,
+                width: tableWidth,
+                height: rowHeight,
+                color: bg,
+                borderColor,
+                borderWidth: 1
+            });
+        } else {
+            page.drawRectangle({
+                x: startX,
+                y: y - rowHeight,
+                width: tableWidth,
+                height: rowHeight,
+                borderColor,
+                borderWidth: 1
+            });
+        }
+        columns.forEach((col) => {
+            const text = row[col.key] != null ? String(row[col.key]) : '';
+            const alignRight = col.align === 'right';
+            const maxW = col.width - cellPadH * 2;
+            const lines = wrapText(text, fonts.regular, PDF_LAYOUT.bodySize, maxW);
+            lines.slice(0, 2).forEach((line, i) => {
+                const tx = alignRight ? col.x + col.width - cellPadH - fonts.regular.widthOfTextAtSize(line, PDF_LAYOUT.bodySize) : col.x + cellPadH;
+                page.drawText(line, { x: tx, y: y - cellPadV - (i + 1) * lineH, size: PDF_LAYOUT.bodySize, font: fonts.regular, color: gray });
+            });
+        });
+        y -= rowHeight;
+    });
+    cursor.y = y - PDF_LAYOUT.gapParagraph;
+};
+
+const generatePdf = async (options = {}) => {
+    const { preview = false } = options;
     const state = readState();
+    if (!state) throw new Error('No inspection state');
+    if (!state.detections) state.detections = [];
+    if (!state.analysis) state.analysis = { threshold: 0.01 };
+    const inspection = state.inspection || {};
+    const reportOpts = state.report || {
+        includeThumbnails: true,
+        includeFalsePositives: false,
+        includeAllPhotos: true,
+        includeFlaggedImages: false,
+        includeFlaggedImageNotes: false,
+        notes: ''
+    };
+    const photos = state.photos || [];
     const includedDetections = filterIncludedDetections(state);
-    const areasInspected = Array.from(new Set(state.photos.filter((p) => p.area).map((p) => p.area)));
+    const findingPages = [];
+    const areasInspected = Array.from(new Set(photos.filter((p) => p && p.area).map((p) => p.area)));
     const pdfDoc = await PDFDocument.create();
     const fonts = {
         regular: await pdfDoc.embedStandardFont(StandardFonts.Helvetica),
         bold: await pdfDoc.embedStandardFont(StandardFonts.HelveticaBold)
     };
 
+    const { pageWidth, pageHeight, margin } = PDF_LAYOUT;
     const cursor = {
-        margin: 50,
-        page: pdfDoc.addPage([612, 792]),
-        y: 792 - 50
+        margin,
+        pageHeight,
+        pageWidth,
+        page: pdfDoc.addPage([pageWidth, pageHeight]),
+        y: pageHeight - margin
     };
 
-    const addSectionTitle = (text) => {
+    const addSectionTitle = (text, size = PDF_LAYOUT.sectionSize) => {
         ensureSpace(pdfDoc, cursor, 28);
-        cursor.page.drawText(text, { x: cursor.margin, y: cursor.y, size: 16, font: fonts.bold, color: rgb(0.08, 0.08, 0.08) });
-        cursor.y -= 22;
+        cursor.page.drawText(text, { x: cursor.margin, y: cursor.y, size, font: fonts.bold, color: rgb(0.08, 0.08, 0.08) });
+        cursor.y -= Math.round(size * PDF_LAYOUT.lineHeight) + 4;
+    };
+
+    const addSubsectionTitle = (text) => {
+        ensureSpace(pdfDoc, cursor, 20);
+        cursor.page.drawText(text, { x: cursor.margin, y: cursor.y, size: PDF_LAYOUT.subsectionSize, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+        cursor.y -= Math.round(PDF_LAYOUT.subsectionSize * PDF_LAYOUT.lineHeight) + 4;
     };
 
     // ========================================
-    // PAGE 1: COVER & SUMMARY
+    // PAGE 1: HEADER & SUMMARY
     // ========================================
-    
-    // Title
-    addLine(cursor.page, 'AIRCRAFT INSPECTION REPORT', fonts, cursor, { size: 24, font: fonts.bold, lineHeight: 30 });
-    cursor.y -= 10;
+    addLine(cursor.page, 'Aircraft Inspection Report', fonts, cursor, { size: PDF_LAYOUT.titleSize, font: fonts.bold, lineHeight: Math.round(PDF_LAYOUT.titleSize * PDF_LAYOUT.lineHeight) });
+    cursor.y -= PDF_LAYOUT.gapSection;
 
-    addSectionTitle('AIRCRAFT INFORMATION');
-    addKeyValue(cursor.page, 'Registration', state.inspection.tailNumber || 'Not provided', fonts, cursor);
-    addKeyValue(cursor.page, 'Make/Model', state.inspection.makeModel || 'Not provided', fonts, cursor);
-    addKeyValue(cursor.page, 'Serial Number', state.inspection.serialNumber || 'Not provided', fonts, cursor);
-    addKeyValue(cursor.page, 'Department', state.inspection.department || 'Not provided', fonts, cursor);
-    addKeyValue(
-        cursor.page,
-        'Inspection Type',
-        `${(state.inspection.inspectionType || 'Inbound').toUpperCase()} INSPECTION`,
-        fonts,
-        cursor
+    addSectionTitle('Aircraft Information');
+    const aircraftRows = [
+        { key: 'Registration', value: inspection.tailNumber || 'Not provided' },
+        { key: 'Make/Model', value: inspection.makeModel || 'Not provided' },
+        { key: 'Serial Number', value: inspection.serialNumber || 'Not provided' },
+        { key: 'Department', value: inspection.department || 'Not provided' },
+        { key: 'Inspection Type', value: `${String(inspection.inspectionType || 'Inbound').replace(/^\w/, (c) => c.toUpperCase())} Inspection` },
+        { key: 'Inspection Date', value: formatUTCDate(inspection.startedAt) },
+        { key: 'Total Time', value: inspection.totalTime || 'Not provided' },
+        { key: 'Session Duration', value: formatDuration(inspection.startedAt) }
+    ];
+    drawTable(cursor.page, fonts, cursor,
+        [{ key: 'key', label: 'Field', width: 160 }, { key: 'value', label: 'Value', width: pageWidth - margin * 2 - 160 - 2 }],
+        aircraftRows.map((r) => ({ key: r.key, value: r.value }))
     );
-    addKeyValue(cursor.page, 'Inspection Date', formatUTCDate(state.inspection.startedAt), fonts, cursor);
-    addKeyValue(cursor.page, 'Total Time', state.inspection.totalTime || 'Not provided', fonts, cursor);
-    addKeyValue(cursor.page, 'Session Duration', formatDuration(state.inspection.startedAt), fonts, cursor);
+    cursor.y -= PDF_LAYOUT.gapParagraph;
 
-    cursor.y -= 6;
-    addSectionTitle('INSPECTION AUTHORITY');
-    addKeyValue(cursor.page, 'Inspector Name', state.inspection.inspectorName || 'Not assigned', fonts, cursor);
+    addSectionTitle('Inspection Authority');
+    addKeyValue(cursor.page, 'Inspector Name', inspection.inspectorName || 'Not assigned', fonts, cursor);
+    cursor.y -= PDF_LAYOUT.gapParagraph;
 
-    cursor.y -= 6;
-    addSectionTitle('INSPECTION SCOPE');
+    addSectionTitle('Inspection Scope');
     addKeyValue(cursor.page, 'Areas Inspected', areasInspected.length ? areasInspected.join(', ') : 'Not recorded', fonts, cursor);
     addKeyValue(cursor.page, 'Inspection Method', 'Computer Vision Analysis', fonts, cursor);
+    cursor.y -= PDF_LAYOUT.gapParagraph;
 
-    cursor.y -= 6;
-    addSectionTitle('NOTES');
-    const notesText = (state.report.notes || '').trim() || 'None';
-    ensureSpace(pdfDoc, cursor, 80);
-    const notesMaxWidth = 612 - cursor.margin * 2;
-    const notesLineHeight = 14;
+    addSectionTitle('Notes');
+    const notesText = (reportOpts.notes || '').trim() || 'None';
+    ensureSpace(pdfDoc, cursor, 60);
+    const notesMaxWidth = pageWidth - cursor.margin * 2;
+    const notesLineHeight = Math.round(PDF_LAYOUT.bodySize * PDF_LAYOUT.lineHeight);
     const notesLineCount = drawWrappedText(cursor.page, notesText, cursor.margin, cursor.y, {
         font: fonts.regular,
-        size: 12,
+        size: PDF_LAYOUT.bodySize,
         color: rgb(0.1, 0.1, 0.1),
         maxWidth: notesMaxWidth,
         lineHeight: notesLineHeight
     });
     cursor.y -= notesLineCount * notesLineHeight;
+    cursor.y -= PDF_LAYOUT.gapParagraph;
+
+    addSectionTitle('Findings Count Summary');
+    const findingsSummaryText = `${includedDetections.length} finding(s) at current confidence threshold.`;
+    cursor.page.drawText(findingsSummaryText, { x: cursor.margin, y: cursor.y, size: PDF_LAYOUT.bodySize, font: fonts.regular, color: rgb(0.1, 0.1, 0.1) });
+    cursor.y -= notesLineHeight;
 
     // ========================================
-    // FLAGGED IMAGES SECTION (if enabled)
+    // PAGE 2: FLAGGED IMAGES (if enabled)
     // ========================================
-    if (state.report.includeFlaggedImages) {
-        const flaggedPhotos = state.photos.filter((photo) => photo.flagged);
+    if (reportOpts.includeFlaggedImages) {
+        const flaggedPhotos = photos.filter((photo) => photo && photo.flagged);
         if (flaggedPhotos.length > 0) {
-            cursor.y -= 20;
-            ensureSpace(pdfDoc, cursor, 100);
-            addSectionTitle('FLAGGED IMAGES - DEFECTS REQUIRING ATTENTION');
-            
-            const imagesPerPage = 2;
-            const imageWidth = (612 - cursor.margin * 3) / 2; // 2 images with margins
-            let imagesOnPage = 0;
-            let currentX = cursor.margin;
+            cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
+            cursor.y = pageHeight - cursor.margin;
+            cursor.y -= PDF_LAYOUT.gapSection;
+            addSectionTitle('Flagged Images — Defects Requiring Attention');
+            const imageMargin = 12;
+            const flaggedImgW = 400;
+            const flaggedImgH = 300;
+            const captionGap = 12;
+            const gap = 24;
             let currentY = cursor.y;
-            let lastDisplayHeight = 0;
-            
+            let currentX = cursor.margin;
             for (const photo of flaggedPhotos) {
-                if (imagesOnPage >= imagesPerPage) {
-                    cursor.page = pdfDoc.addPage([612, 792]);
-                    cursor.y = 792 - cursor.margin;
-                    currentY = cursor.y;
-                    currentX = cursor.margin;
-                    imagesOnPage = 0;
-                }
-                
+                ensureSpace(pdfDoc, cursor, flaggedImgH + 100);
+                currentY = cursor.y;
                 try {
-                    // Get detections for this photo
                     const photoDetections = includedDetections.filter((det) => det.photoId === photo.id);
                     const annotated = await createAnnotatedImage(photo, photoDetections, null);
                     const pngImage = await pdfDoc.embedPng(annotated);
-                    const scale = imageWidth / pngImage.width;
-                    const displayHeight = pngImage.height * scale;
-                    lastDisplayHeight = displayHeight;
-                    
-                    // Ensure we have space for the image
-                    if (currentY - displayHeight - 30 < cursor.margin) {
-                        cursor.page = pdfDoc.addPage([612, 792]);
-                        cursor.y = 792 - cursor.margin;
-                        currentY = cursor.y;
-                        currentX = cursor.margin;
-                        imagesOnPage = 0;
-                    }
-                    
-                    // Label
-                    cursor.page.drawText(`Flagged Image - Photo #${photo.number} - ${photo.area || 'Unknown'}`, {
+                    const scale = Math.min((flaggedImgW - imageMargin * 2) / pngImage.width, (flaggedImgH - imageMargin * 2) / pngImage.height);
+                    const w = pngImage.width * scale;
+                    const h = pngImage.height * scale;
+                    cursor.page.drawText(`Photo #${photo.number} — ${photo.area || 'Unknown'}`, {
                         x: currentX,
                         y: currentY,
-                        size: 10,
+                        size: PDF_LAYOUT.subsectionSize,
                         font: fonts.bold,
                         color: rgb(0.1, 0.1, 0.1)
                     });
                     currentY -= 16;
-                    
-                    // Image
-                    cursor.page.drawImage(pngImage, {
+                    cursor.page.drawRectangle({
                         x: currentX,
-                        y: currentY - displayHeight,
-                        width: imageWidth,
-                        height: displayHeight
+                        y: currentY - flaggedImgH,
+                        width: flaggedImgW,
+                        height: flaggedImgH,
+                        borderColor: rgb(0.867, 0.867, 0.867),
+                        borderWidth: 1
                     });
-                    
-                    // Add note if enabled and note exists
-                    let noteHeight = 0;
-                    if (state.report.includeFlaggedImageNotes && photo.flaggedNote && photo.flaggedNote.trim()) {
-                        const noteY = currentY - displayHeight - 8;
-                        const noteText = `Note: ${photo.flaggedNote.trim()}`;
-                        const noteMaxWidth = imageWidth;
-                        const noteLines = wrapText(noteText, fonts.regular, 9, noteMaxWidth);
-                        noteHeight = noteLines.length * 11 + 4;
-                        
-                        // Ensure we have space for the note
-                        if (noteY - noteHeight < cursor.margin) {
-                            cursor.page = pdfDoc.addPage([612, 792]);
-                            cursor.y = 792 - cursor.margin;
-                            currentY = cursor.y;
-                            currentX = cursor.margin;
-                            imagesOnPage = 0;
-                            // Redraw label and image on new page
-                            cursor.page.drawText(`Flagged Image - Photo #${photo.number} - ${photo.area || 'Unknown'}`, {
-                                x: currentX,
-                                y: currentY,
-                                size: 10,
-                                font: fonts.bold,
-                                color: rgb(0.1, 0.1, 0.1)
-                            });
-                            currentY -= 16;
-                            cursor.page.drawImage(pngImage, {
-                                x: currentX,
-                                y: currentY - displayHeight,
-                                width: imageWidth,
-                                height: displayHeight
-                            });
-                        }
-                        
-                        // Draw note below image
-                        const finalNoteY = currentY - displayHeight - 8;
+                    cursor.page.drawImage(pngImage, {
+                        x: currentX + imageMargin + (flaggedImgW - imageMargin * 2 - w) / 2,
+                        y: currentY - flaggedImgH + imageMargin + (flaggedImgH - imageMargin * 2 - h) / 2,
+                        width: w,
+                        height: h
+                    });
+                    currentY -= flaggedImgH + captionGap;
+                    if (reportOpts.includeFlaggedImageNotes && photo.flaggedNote && photo.flaggedNote.trim()) {
+                        const noteLines = wrapText(`Note: ${photo.flaggedNote.trim()}`, fonts.regular, PDF_LAYOUT.captionSize, flaggedImgW - 4);
                         noteLines.forEach((line, idx) => {
                             cursor.page.drawText(line, {
                                 x: currentX,
-                                y: finalNoteY - idx * 11,
-                                size: 9,
+                                y: currentY - idx * 12,
+                                size: PDF_LAYOUT.captionSize,
                                 font: fonts.regular,
-                                color: rgb(0.1, 0.1, 0.1)
+                                color: rgb(PDF_LAYOUT.captionGray, PDF_LAYOUT.captionGray, PDF_LAYOUT.captionGray)
                             });
                         });
+                        currentY -= noteLines.length * 12 + captionGap;
                     }
-                    
-                    currentX += imageWidth + cursor.margin;
-                    if (currentX + imageWidth > 612 - cursor.margin) {
-                        currentX = cursor.margin;
-                        currentY -= displayHeight + noteHeight + 40;
-                        imagesOnPage++;
-                    } else {
-                        imagesOnPage++;
-                    }
-                    
-                    // Update cursor position
-                    if (currentX === cursor.margin) {
-                        cursor.y = currentY;
-                    }
+                    currentY -= gap;
+                    cursor.y = currentY;
                 } catch (error) {
                     console.error('Failed to embed flagged image', error);
                 }
             }
-            
-            // Update cursor after flagged images section
-            if (currentX === cursor.margin) {
-                cursor.y = currentY;
-            } else {
-                cursor.y = currentY - lastDisplayHeight - 40;
-            }
-            cursor.y -= 20;
+            cursor.y -= PDF_LAYOUT.gapSection;
         }
     }
 
-    cursor.y -= 12;
-    addSectionTitle('AIRCRAFT SECTIONING FOR INSPECTION PROCESS');
+    // ========================================
+    // PAGE 3: TECHNICAL REFERENCE
+    // ========================================
+    cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
+    cursor.y = pageHeight - cursor.margin;
+    cursor.y -= PDF_LAYOUT.gapSection;
+    addSectionTitle('Aircraft Sectioning for Inspection Process');
     
-    // Section color legend
-    ensureSpace(pdfDoc, cursor, 150);
-    cursor.page.drawText('Section Color Legend:', { 
-        x: cursor.margin, 
-        y: cursor.y, 
-        size: 12, 
-        font: fonts.bold, 
-        color: rgb(0.1, 0.1, 0.1) 
-    });
-    cursor.y -= 18;
+    addSubsectionTitle('Section Color Legend');
+    ensureSpace(pdfDoc, cursor, 100);
     
     // Color legend entries with exact hex values
     const sectionColors = [
@@ -645,19 +1162,14 @@ const generatePdf = async () => {
         legendX += itemWidth;
     });
     
-    cursor.y = legendY - legendLineHeight - 20;
-    
-    // Technical reference views
-    ensureSpace(pdfDoc, cursor, 200);
-    cursor.page.drawText('Technical Reference Views:', {
-        x: cursor.margin,
-        y: cursor.y,
-        size: 12,
-        font: fonts.bold,
-        color: rgb(0.1, 0.1, 0.1)
-    });
-    cursor.y -= 18;
-    
+    cursor.y = legendY - legendLineHeight - PDF_LAYOUT.gapSubsection;
+    addSubsectionTitle('Technical Reference Views');
+    const viewSpacing = 20;
+    const availableWidth = pageWidth - cursor.margin * 2;
+    const viewWidth = Math.min(300, Math.floor((availableWidth - viewSpacing * 2) / 3));
+    const viewHeightTarget = Math.round(viewWidth * (200 / 300));
+    ensureSpace(pdfDoc, cursor, viewHeightTarget + 60);
+
     // Try to capture 3D views - wait for viewer to be ready
     let technicalViews = { top: null, side: null, front: null };
     
@@ -723,15 +1235,10 @@ const generatePdf = async () => {
         console.warn('No 3D capture functions available on window object');
     }
     
-    // Display views with proper aspect ratio and spacing
-    // Total available width: 512px (612 - 50 margin on each side)
-    // Three views with 20px gaps: (512 - 40) / 3 = ~157px per view
-    const viewSpacing = 20;
-    const availableWidth = 512; // 612 - cursor.margin * 2
-    const viewWidth = Math.floor((availableWidth - (viewSpacing * 2)) / 3); // ~157px
+    // Display views: target 300x200pt each, fit in page
     const viewsPerRow = 3;
     const totalViewsWidth = (viewWidth * viewsPerRow) + (viewSpacing * (viewsPerRow - 1));
-    const startX = cursor.margin + (612 - cursor.margin * 2 - totalViewsWidth) / 2;
+    const startX = cursor.margin + (cursor.pageWidth - cursor.margin * 2 - totalViewsWidth) / 2;
     
     const views = [
         { key: 'top', label: 'Top View', dataUrl: technicalViews.top },
@@ -766,8 +1273,7 @@ const generatePdf = async () => {
                 
                 maxViewHeight = Math.max(maxViewHeight, displayHeight);
             } else {
-                // Placeholder rectangle
-                const placeholderHeight = viewWidth * 0.75; // 3:4 aspect ratio placeholder
+                const placeholderHeight = viewHeightTarget;
                 viewData.push({
                     image: null,
                     width: viewWidth,
@@ -779,15 +1285,14 @@ const generatePdf = async () => {
             }
         } catch (error) {
             console.error(`Failed to embed ${view.key} view:`, error);
-            const placeholderHeight = viewWidth * 0.75;
             viewData.push({
                 image: null,
                 width: viewWidth,
-                height: placeholderHeight,
+                height: viewHeightTarget,
                 label: view.label,
                 hasImage: false
             });
-            maxViewHeight = Math.max(maxViewHeight, placeholderHeight);
+            maxViewHeight = Math.max(maxViewHeight, viewHeightTarget);
         }
     }
     
@@ -838,158 +1343,98 @@ const generatePdf = async () => {
         currentX += view.width + viewSpacing;
     }
     
-    cursor.y = viewsStartY - maxViewHeight - 40;
-    
-    // Heat mapping legend
-    ensureSpace(pdfDoc, cursor, 50);
-    cursor.page.drawText('Heat Mapping Legend:', {
-        x: cursor.margin,
-        y: cursor.y,
-        size: 10,
-        font: fonts.bold,
-        color: rgb(0.1, 0.1, 0.1)
-    });
-    cursor.y -= 14;
-    
+    cursor.y = viewsStartY - maxViewHeight - PDF_LAYOUT.gapItem;
+    addSubsectionTitle('Heat Mapping Legend');
     const heatLegendText = 'Color intensity indicates defect concentration: White = 0 defects, Yellow-Orange gradient = 1-9 defects, Bright Red = 10+ defects. Heat mapping is overlaid on each section\'s designated color (Teal FWD, Green MID, Blue Wings, Red AFT, Purple Engines, Orange Vertical Stabilizer, Yellow Horizontal Stabilizer). Only inspected sections display color-coding; uninspected areas appear in neutral gray.';
-    const heatLegendLines = wrapText(heatLegendText, fonts.regular, 9, 612 - cursor.margin * 2);
+    const heatLegendLines = wrapText(heatLegendText, fonts.regular, PDF_LAYOUT.captionSize, pageWidth - cursor.margin * 2);
     heatLegendLines.forEach((line, idx) => {
         cursor.page.drawText(line, {
             x: cursor.margin,
             y: cursor.y - idx * 12,
-            size: 9,
+            size: PDF_LAYOUT.captionSize,
+            font: fonts.regular,
+            color: rgb(PDF_LAYOUT.captionGray, PDF_LAYOUT.captionGray, PDF_LAYOUT.captionGray)
+        });
+    });
+    cursor.y -= heatLegendLines.length * 12 + PDF_LAYOUT.gapSection;
+
+    // ========================================
+    // PAGE 4: FINDINGS SUMMARY TABLE
+    // ========================================
+    cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
+    cursor.y = pageHeight - cursor.margin;
+    cursor.y -= PDF_LAYOUT.gapSection;
+    addSectionTitle('Findings Summary');
+    if (includedDetections.length > 0) {
+        const tableW = pageWidth - cursor.margin * 2;
+        const summaryCols = [
+            { key: 'id', label: 'ID', width: 52 },
+            { key: 'type', label: 'Defect Type', width: 170 },
+            { key: 'location', label: 'Location', width: 128 },
+            { key: 'photo', label: 'Photo #', width: 58, align: 'right' },
+            { key: 'confidence', label: 'Confidence', width: 72, align: 'right' }
+        ];
+        const summaryRows = includedDetections.map((detection, idx) => ({
+            id: `F-${String(idx + 1).padStart(3, '0')}`,
+            type: detection.class || 'Defect',
+            location: detection.area || 'N/A',
+            photo: `#${detection.photoNumber}`,
+            confidence: detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'N/A')
+        }));
+        drawTable(cursor.page, fonts, cursor, summaryCols, summaryRows);
+    } else {
+        cursor.page.drawText('No defects met the reporting criteria at the selected threshold.', {
+            x: cursor.margin,
+            y: cursor.y,
+            size: PDF_LAYOUT.bodySize,
             font: fonts.regular,
             color: rgb(0.1, 0.1, 0.1)
         });
-    });
-    cursor.y -= heatLegendLines.length * 12 + 12;
-
-    cursor.y -= 12;
-    addSectionTitle('FINDINGS SUMMARY');
-    
-    // Summary table
-    if (includedDetections.length > 0) {
-        ensureSpace(pdfDoc, cursor, 40);
-        
-        // Table header with explicit column widths to avoid overlap
-        const tableColumns = [
-            { key: 'id', label: 'ID', width: 55 },
-            { key: 'type', label: 'Defect Type', width: 150 },
-            { key: 'location', label: 'Location', width: 140 },
-            { key: 'photo', label: 'Photo #', width: 70 },
-            { key: 'confidence', label: 'Confidence', width: 90 }
-        ];
-        let columnX = cursor.margin;
-        tableColumns.forEach((col) => {
-            col.x = columnX;
-            columnX += col.width + 12;
-            cursor.page.drawText(col.label, { x: col.x, y: cursor.y, size: 10, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-        });
-        
-        cursor.y -= 16;
-        
-        // Table rows
-        let findingIndex = 1;
-        const rowLineHeight = 12;
-        for (const detection of includedDetections) {
-            const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'N/A');
-            const defectType = detection.class || 'Defect';
-            const location = detection.area || 'N/A';
-            const photoText = `#${detection.photoNumber}`;
-
-            const wrapped = {
-                id: wrapText(`F-${String(findingIndex).padStart(3, '0')}`, fonts.regular, 9, tableColumns[0].width),
-                type: wrapText(defectType, fonts.regular, 9, tableColumns[1].width),
-                location: wrapText(location, fonts.regular, 9, tableColumns[2].width),
-                photo: wrapText(photoText, fonts.regular, 9, tableColumns[3].width),
-                confidence: wrapText(confidence, fonts.regular, 9, tableColumns[4].width)
-            };
-            const maxLines = Math.max(...Object.values(wrapped).map((lines) => lines.length));
-            const rowHeight = maxLines * rowLineHeight + 4;
-            ensureSpace(pdfDoc, cursor, rowHeight + 4);
-
-            drawWrappedText(cursor.page, wrapped.id.join(' '), tableColumns[0].x, cursor.y, {
-                font: fonts.regular,
-                size: 9,
-                color: rgb(0.1, 0.1, 0.1),
-                maxWidth: tableColumns[0].width,
-                lineHeight: rowLineHeight
-            });
-            drawWrappedText(cursor.page, defectType, tableColumns[1].x, cursor.y, {
-                font: fonts.regular,
-                size: 9,
-                color: rgb(0.1, 0.1, 0.1),
-                maxWidth: tableColumns[1].width,
-                lineHeight: rowLineHeight
-            });
-            drawWrappedText(cursor.page, location, tableColumns[2].x, cursor.y, {
-                font: fonts.regular,
-                size: 9,
-                color: rgb(0.1, 0.1, 0.1),
-                maxWidth: tableColumns[2].width,
-                lineHeight: rowLineHeight
-            });
-            drawWrappedText(cursor.page, photoText, tableColumns[3].x, cursor.y, {
-                font: fonts.regular,
-                size: 9,
-                color: rgb(0.1, 0.1, 0.1),
-                maxWidth: tableColumns[3].width,
-                lineHeight: rowLineHeight
-            });
-            drawWrappedText(cursor.page, confidence, tableColumns[4].x, cursor.y, {
-                font: fonts.regular,
-                size: 9,
-                color: rgb(0.1, 0.1, 0.1),
-                maxWidth: tableColumns[4].width,
-                lineHeight: rowLineHeight
-            });
-
-            cursor.y -= rowHeight;
-            findingIndex++;
-        }
-    } else {
-        addLine(cursor.page, 'No defects met the reporting criteria at the selected threshold.', fonts, cursor, { size: 12 });
+        cursor.y -= 20;
     }
 
     // ========================================
-    // PAGES 2+: DETAILED FINDINGS (COMPACT)
+    // PAGES 5+: DETAILED FINDINGS (card layout)
     // ========================================
-    
     if (includedDetections.length > 0) {
-        cursor.y -= 20;
-        ensureSpace(pdfDoc, cursor, 100);
-        addSectionTitle('DETAILED FINDINGS');
+        cursor.y -= PDF_LAYOUT.gapSection;
+        ensureSpace(pdfDoc, cursor, 280);
+        addSectionTitle('Detailed Findings');
 
         let findingIndex = 1;
-        const THUMBNAIL_MAX_HEIGHT = 120; // Maximum thumbnail height
-        const THUMBNAIL_WIDTH = 140; // Base width for thumbnail area calculation
-        const THUMBNAIL_MARGIN = 18; // Gap between thumbnail and detail text (15-20px)
-        const DETAILS_X = cursor.margin + THUMBNAIL_WIDTH + THUMBNAIL_MARGIN;
-        const FINDING_HEIGHT = 175; // Compact: ~25px title/subtitle + ~120px content + ~30px spacing
-        const FINDINGS_PER_PAGE = 4; // Target 3-4 findings per page
+        const BORDER_W = 4;
+        const CARD_THUMB_W = 200;
+        const CARD_THUMB_H = 150;
+        const CARD_GAP = 24;
+        const CARD_MIN_H = 240;
+        const CARD_PAD = 20;
+        const DETAILS_X = cursor.margin + BORDER_W + CARD_THUMB_W + CARD_PAD;
 
         for (const detection of includedDetections) {
-            // Check if we need a new page (target 3-4 findings per page)
-            const findingsOnPage = (findingIndex - 1) % FINDINGS_PER_PAGE;
-            if (findingsOnPage === 0 && findingIndex > 1) {
-                cursor.page = pdfDoc.addPage([612, 792]);
-                cursor.y = 792 - cursor.margin;
-            }
-            
-            ensureSpace(pdfDoc, cursor, FINDING_HEIGHT);
-            
-            const photo = state.photos.find((p) => p.id === detection.photoId);
+            ensureSpace(pdfDoc, cursor, CARD_MIN_H + CARD_GAP);
+            if (preview) findingPages.push(pdfDoc.getPageCount());
+
+            const photo = photos.find((p) => p && p.id === detection.photoId);
             const confidence = detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'Not recorded');
             const bbox = detection.bbox || {};
             const dims = bbox.width && bbox.height
                 ? `${Math.round(bbox.width)} × ${Math.round(bbox.height)} px`
                 : 'Not recorded';
+            const isCritical = Boolean(detection.critical);
 
             const detectionLabel = detection.manual ? 'Manual Detection' : 'AI Detection';
             const findingTitle = `Finding F-${String(findingIndex).padStart(3, '0')}: ${detection.class || 'Defect'}`;
-            
+
             const findingStartY = cursor.y;
-            const maxDetailWidth = 612 - DETAILS_X - cursor.margin;
+            const maxDetailWidth = Math.max(120, pageWidth - DETAILS_X - cursor.margin - 12);
+
+            cursor.page.drawRectangle({
+                x: cursor.margin,
+                y: cursor.y - CARD_MIN_H,
+                width: BORDER_W,
+                height: CARD_MIN_H,
+                color: isCritical ? rgb(0.863, 0.149, 0.278) : rgb(0.9, 0.9, 0.9)
+            });
             
             // Title and Subtitle on right side (detail area), spanning down
             // Title - draw at top, then move down
@@ -1025,11 +1470,8 @@ const generatePdf = async () => {
             const subtitleBottom = subtitleY - subtitleHeight;
             cursor.y = subtitleBottom - 8; // 8px gap after subtitle
 
-            // Details start below subtitle - thumbnail aligns with details top
-            // This is where both thumbnail and details should start (after title/subtitle)
-            const thumbnailAndDetailsStartY = subtitleBottom - 8; // Start details after subtitle gap
-            let detailY = thumbnailAndDetailsStartY; // Start details at this position
-            
+            const thumbnailAndDetailsStartY = subtitleBottom - 8;
+            let detailY = thumbnailAndDetailsStartY;
             const detailWidth = maxDetailWidth - 55;
             // Detail fields with compact 11px line spacing
             cursor.page.drawText('Location:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
@@ -1107,6 +1549,18 @@ const generatePdf = async () => {
             });
             detailY -= Math.max(actionLines.length, 1) * 11; // Move down after action lines
 
+            if (detection.note && String(detection.note).trim()) {
+                cursor.page.drawText('Notes:', { x: DETAILS_X, y: detailY, size: 9, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
+                const noteLines = drawWrappedText(cursor.page, String(detection.note).trim(), DETAILS_X + 55, detailY, {
+                    font: fonts.regular,
+                    size: 9,
+                    color: rgb(0.1, 0.1, 0.1),
+                    maxWidth: labelWidth,
+                    lineHeight: 11
+                });
+                detailY -= Math.max(noteLines, 1) * 11;
+            }
+
             // Calculate bottom of details section for cursor positioning
             const detailsBottom = detailY;
             
@@ -1114,63 +1568,51 @@ const generatePdf = async () => {
             let thumbnailBottom = findingStartY; // Default if no thumbnail
             if (photo?.dataURL) {
                 try {
-                    const thumbResult = await createCroppedThumbnail(photo.dataURL, detection.bbox, THUMBNAIL_MAX_HEIGHT);
+                    const thumbResult = await createCroppedThumbnail(photo.dataURL, detection.bbox, CARD_THUMB_H);
                     const thumbImage = await pdfDoc.embedPng(thumbResult.src);
-                    // Scale thumbnail to fit max height while maintaining aspect ratio
                     const aspectRatio = thumbResult.width / thumbResult.height;
-                    let displayHeight = thumbResult.height;
-                    let displayWidth = thumbResult.width;
-                    
-                    // Constrain to maximum height
-                    if (displayHeight > THUMBNAIL_MAX_HEIGHT) {
-                        displayHeight = THUMBNAIL_MAX_HEIGHT;
-                        displayWidth = displayHeight * aspectRatio;
-                    }
-                    
-                    // Ensure width doesn't exceed allocated space
-                    if (displayWidth > THUMBNAIL_WIDTH) {
-                        displayWidth = THUMBNAIL_WIDTH;
-                        displayHeight = displayWidth / aspectRatio;
-                    }
-                    
-                    // Place thumbnail aligned with detail fields (top aligned at thumbnailAndDetailsStartY)
-                    const thumbY = thumbnailAndDetailsStartY - displayHeight;
-                    
-                    cursor.page.drawImage(thumbImage, {
-                        x: cursor.margin,
+                    let w = thumbResult.width;
+                    let h = thumbResult.height;
+                    if (h > CARD_THUMB_H) { h = CARD_THUMB_H; w = h * aspectRatio; }
+                    if (w > CARD_THUMB_W) { w = CARD_THUMB_W; h = w / aspectRatio; }
+                    const thumbY = thumbnailAndDetailsStartY - h;
+                    cursor.page.drawRectangle({
+                        x: cursor.margin + BORDER_W,
                         y: thumbY,
-                        width: displayWidth,
-                        height: displayHeight
+                        width: CARD_THUMB_W,
+                        height: CARD_THUMB_H,
+                        borderColor: rgb(0.867, 0.867, 0.867),
+                        borderWidth: 1
                     });
-                    
-                    // Track thumbnail bottom for cursor positioning
+                    cursor.page.drawImage(thumbImage, {
+                        x: cursor.margin + BORDER_W + (CARD_THUMB_W - w) / 2,
+                        y: thumbY + (CARD_THUMB_H - h) / 2,
+                        width: w,
+                        height: h
+                    });
                     thumbnailBottom = thumbY;
                 } catch (error) {
                     console.error('Failed to embed thumbnail', error);
                 }
             }
 
-            // Move cursor down for next finding
-            // Use the lower of: details bottom or thumbnail bottom
             const findingBottom = Math.min(detailsBottom, thumbnailBottom);
-            cursor.y = findingBottom - 30; // 30px gap before next finding
+            cursor.y = findingBottom - CARD_GAP;
             findingIndex += 1;
         }
     }
 
     // ========================================
-    // LAST PAGE: FULL RESOLUTION IMAGES (OPTIONAL)
+    // LAST PAGES: FULL RESOLUTION IMAGES (optional)
     // ========================================
-    
-    if (state.report.includeThumbnails && includedDetections.length > 0) {
-        cursor.y -= 30;
-        ensureSpace(pdfDoc, cursor, 100);
-        addSectionTitle('FULL RESOLUTION IMAGES');
-        
-        // Group detections by photo to avoid duplicates
+    if (reportOpts.includeThumbnails && includedDetections.length > 0) {
+        cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
+        cursor.y = pageHeight - cursor.margin;
+        cursor.y -= PDF_LAYOUT.gapSection;
+        addSectionTitle('Full Resolution Images');
         const photoMap = new Map();
         includedDetections.forEach((detection) => {
-            const photo = state.photos.find((p) => p.id === detection.photoId);
+            const photo = photos.find((p) => p && p.id === detection.photoId);
             if (photo && !photoMap.has(photo.id)) {
                 photoMap.set(photo.id, { photo, detections: [] });
             }
@@ -1179,61 +1621,73 @@ const generatePdf = async () => {
             }
         });
 
-        const imagesPerPage = 2;
-        const imageWidth = (612 - cursor.margin * 3) / 2; // 2 images with margins
-        let imagesOnPage = 0;
-        let currentX = cursor.margin;
+        const fullGap = 24;
+        const fullImageMargin = 12;
+        const fullCaptionGap = 12;
+        const colWidth = (pageWidth - cursor.margin * 2 - fullGap) / 2;
+        const fullImgW = Math.min(600, colWidth);
+        const fullImgH = Math.round(fullImgW * (450 / 600));
         let currentY = cursor.y;
+        let currentX = cursor.margin;
+        let col = 0;
 
-        for (const [photoId, { photo, detections }] of photoMap) {
-            if (imagesOnPage >= imagesPerPage) {
-                cursor.page = pdfDoc.addPage([612, 792]);
-                cursor.y = 792 - cursor.margin;
-                currentY = cursor.y;
+        for (const [, { photo, detections }] of photoMap) {
+            if (col === 2) {
+                currentY -= fullImgH + fullCaptionGap + fullGap;
+                if (currentY - fullImgH - 50 < cursor.margin) {
+                    cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
+                    currentY = pageHeight - cursor.margin;
+                    cursor.y = currentY;
+                }
                 currentX = cursor.margin;
-                imagesOnPage = 0;
+                col = 0;
             }
-
             try {
                 const annotated = await createAnnotatedImage(photo, detections, null);
                 const pngImage = await pdfDoc.embedPng(annotated);
-                const scale = imageWidth / pngImage.width;
-                const displayHeight = pngImage.height * scale;
-
-                // Label
-                cursor.page.drawText(`Photo #${photo.number} - ${photo.area || 'Unknown'}`, {
+                const scale = Math.min((fullImgW - fullImageMargin * 2) / pngImage.width, (fullImgH - fullImageMargin * 2) / pngImage.height);
+                const w = pngImage.width * scale;
+                const h = pngImage.height * scale;
+                cursor.page.drawText(`Photo #${photo.number} — ${photo.area || 'Unknown'}`, {
                     x: currentX,
                     y: currentY,
-                    size: 10,
+                    size: PDF_LAYOUT.subsectionSize,
                     font: fonts.bold,
                     color: rgb(0.1, 0.1, 0.1)
                 });
-                currentY -= 16;
-
-                // Image
-                cursor.page.drawImage(pngImage, {
+                currentY -= fullCaptionGap;
+                cursor.page.drawRectangle({
                     x: currentX,
-                    y: currentY - displayHeight,
-                    width: imageWidth,
-                    height: displayHeight
+                    y: currentY - fullImgH,
+                    width: fullImgW,
+                    height: fullImgH,
+                    borderColor: rgb(0.867, 0.867, 0.867),
+                    borderWidth: 1
                 });
-
-                currentX += imageWidth + cursor.margin;
-                if (currentX + imageWidth > 612 - cursor.margin) {
-                    currentX = cursor.margin;
-                    currentY -= displayHeight + 40;
-                    imagesOnPage++;
+                cursor.page.drawImage(pngImage, {
+                    x: currentX + fullImageMargin + (fullImgW - fullImageMargin * 2 - w) / 2,
+                    y: currentY - fullImgH + fullImageMargin + (fullImgH - fullImageMargin * 2 - h) / 2,
+                    width: w,
+                    height: h
+                });
+                if (col === 0) {
+                    currentX += colWidth + fullGap;
                 } else {
-                    imagesOnPage++;
+                    currentY -= fullImgH + fullCaptionGap + fullGap;
                 }
+                col++;
             } catch (error) {
                 console.error('Failed to embed full resolution image', error);
             }
         }
     }
 
+    addHeaderAndFooter(pdfDoc, fonts, state);
     const pdfBytes = await pdfDoc.save();
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    if (preview) {
+        return { blob, pageCount: pdfDoc.getPageCount(), findingPages };
+    }
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -1248,30 +1702,36 @@ export { generatePdf };
 thumbnailToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeThumbnails: event.target.checked });
     renderSummary();
+    dispatchReportStateChanged();
 });
 
 falsePositiveToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeFalsePositives: event.target.checked });
     renderSummary();
+    dispatchReportStateChanged();
 });
 
 allPhotosToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeAllPhotos: event.target.checked });
     renderSummary();
+    dispatchReportStateChanged();
 });
 
 flaggedImagesToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeFlaggedImages: event.target.checked });
     renderSummary();
+    dispatchReportStateChanged();
 });
 
 flaggedImageNotesToggle?.addEventListener('change', (event) => {
     updateReportOptions({ includeFlaggedImageNotes: event.target.checked });
     renderSummary();
+    dispatchReportStateChanged();
 });
 
 reportNotesEl?.addEventListener('input', () => {
     updateReportOptions({ notes: reportNotesEl.value });
+    dispatchReportStateChanged();
 });
 
 // Save note only when user leaves the field (blur event) to prevent duplicates
@@ -1302,18 +1762,20 @@ backToResultsBtn?.addEventListener('click', () => {
     window.location.href = 'results.html';
 });
 
-downloadReportBtn?.addEventListener('click', async () => {
-    const originalLabel = downloadReportBtn.textContent;
-    downloadReportBtn.disabled = true;
-    downloadReportBtn.textContent = 'Generating PDF…';
+generateFinalReportBtn?.addEventListener('click', async () => {
+    const btn = generateFinalReportBtn;
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
     try {
         await generatePdf();
+        window.location.href = 'success.html';
     } catch (error) {
         console.error('PDF generation failed', error);
         alert(error.message || 'Unable to generate PDF. Please try again.');
     } finally {
-        downloadReportBtn.disabled = false;
-        downloadReportBtn.textContent = originalLabel;
+        btn.disabled = false;
+        btn.textContent = originalLabel;
     }
 });
 
@@ -1343,5 +1805,11 @@ logoBtn?.addEventListener('click', () => {
 const initialState = ensureAnalysisComplete();
 if (initialState) {
     renderSummary();
+    dispatchReportStateChanged();
 }
+
+window.addEventListener('report-state-changed', () => {
+    renderFlaggedImagesNotes();
+    renderFindingsList();
+});
 
