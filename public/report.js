@@ -466,6 +466,10 @@ const renderFindingsList = () => {
         card.setAttribute('tabindex', '0');
         card.setAttribute('aria-expanded', String(isExpanded));
 
+        const rawNote = (detection.note && String(detection.note).trim()) ? String(detection.note).trim() : '';
+        const notePreview = rawNote
+            ? (rawNote.replace(/</g, '&lt;').replace(/>/g, '&gt;').slice(0, 60) + (rawNote.length > 60 ? '…' : ''))
+            : '';
         const collapsedHtml = `
             <div class="report-finding-card-collapsed">
                 <label class="report-finding-check" onclick="event.stopPropagation()">
@@ -477,6 +481,7 @@ const renderFindingsList = () => {
                     <span class="report-finding-type">${safeType}</span>
                     <span class="report-finding-loc">${(detection.area || '—')} · Photo #${detection.photoNumber || '—'}</span>
                     <span class="report-finding-conf">${confidence}</span>
+                    ${notePreview ? `<span class="report-finding-note-preview">${notePreview}</span>` : ''}
                 </div>
                 <span class="report-finding-chevron" aria-hidden="true">${FINDING_ICONS.chevronDown}</span>
             </div>
@@ -777,10 +782,14 @@ const addKeyValue = (page, key, value, fonts, cursor) => {
     cursor.y -= lineCount * lineHeight;
 };
 
+const PDF_HEADER_CLEARANCE = 40;
+const PDF_FOOTER_CLEARANCE = 44;
+
 const ensureSpace = (pdfDoc, cursor, needed) => {
-    if (cursor.y - needed <= cursor.margin) {
+    const minY = cursor.margin + PDF_FOOTER_CLEARANCE;
+    if (cursor.y - needed <= minY) {
         cursor.page = pdfDoc.addPage([cursor.pageWidth, cursor.pageHeight]);
-        cursor.y = cursor.pageHeight - cursor.margin;
+        cursor.y = cursor.pageHeight - cursor.margin - PDF_HEADER_CLEARANCE;
     }
 };
 
@@ -858,45 +867,65 @@ const addHeaderAndFooter = (pdfDoc, fonts, state) => {
 };
 
 const drawTable = (page, fonts, cursor, columns, rows, options = {}) => {
-    const { headerBg = PDF_LAYOUT.tableHeaderBg, rowAlt = PDF_LAYOUT.tableRowAlt, border = PDF_LAYOUT.tableBorder } = options;
+    const { headerBg = PDF_LAYOUT.tableHeaderBg, rowAlt = PDF_LAYOUT.tableRowAlt, border = PDF_LAYOUT.tableBorder, pdfDoc, contentBottomY } = options;
     const lineH = PDF_LAYOUT.bodySize + 2;
     const cellPadH = PDF_LAYOUT.cellPadH;
     const cellPadV = PDF_LAYOUT.cellPadV;
     const rowGap = PDF_LAYOUT.tableRowGap || 4;
     const margin = PDF_LAYOUT.margin;
     const pageWidth = PDF_LAYOUT.pageWidth;
+    const pageHeight = PDF_LAYOUT.pageHeight;
     const tableWidth = pageWidth - margin * 2;
-    let y = cursor.y;
-    const rowHeight = lineH + cellPadV * 2 + rowGap;
+    const rowHeight = 2 * lineH + cellPadV * 2 + rowGap;
     const gray = rgb(0.1, 0.1, 0.1);
     const borderColor = rgb(border, border, border);
+    const totalColWidth = columns.reduce((sum, col) => sum + (col.width || 0), 0);
+    const scale = totalColWidth > 0 && totalColWidth > tableWidth ? tableWidth / totalColWidth : 1;
     let colX = margin;
     columns.forEach((col) => {
+        const w = Math.max(1, Math.floor((col.width || 0) * scale));
         col.x = colX;
-        colX += col.width;
+        col.width = w;
+        colX += w;
     });
     const startX = margin;
+    const bottomY = contentBottomY ?? margin + 40;
+
+    const drawHeaderRow = (p, yPos) => {
+        p.drawRectangle({
+            x: startX,
+            y: yPos - rowHeight,
+            width: tableWidth,
+            height: rowHeight,
+            color: rgb(headerBg, headerBg, headerBg),
+            borderColor,
+            borderWidth: 1
+        });
+        columns.forEach((col) => {
+            const label = (col.label != null) ? String(col.label) : '';
+            const alignRight = col.align === 'right';
+            const x = alignRight ? col.x + col.width - cellPadH - fonts.bold.widthOfTextAtSize(label, PDF_LAYOUT.bodySize) : col.x + cellPadH;
+            p.drawText(label, { x, y: yPos - rowHeight + cellPadV + 2, size: PDF_LAYOUT.bodySize, font: fonts.bold, color: gray });
+        });
+    };
+
+    let y = cursor.y;
+    let currentPage = cursor.page;
+    drawHeaderRow(currentPage, y);
     y -= rowHeight;
-    page.drawRectangle({
-        x: startX,
-        y: y,
-        width: tableWidth,
-        height: rowHeight,
-        color: rgb(headerBg, headerBg, headerBg),
-        borderColor,
-        borderWidth: 1
-    });
-    columns.forEach((col) => {
-        const label = (col.label != null) ? String(col.label) : '';
-        const alignRight = col.align === 'right';
-        const x = alignRight ? col.x + col.width - cellPadH - fonts.bold.widthOfTextAtSize(label, PDF_LAYOUT.bodySize) : col.x + cellPadH;
-        page.drawText(label, { x, y: y + cellPadV + 2, size: PDF_LAYOUT.bodySize, font: fonts.bold, color: gray });
-    });
-    y -= rowHeight;
+
     rows.forEach((row, idx) => {
+        if (pdfDoc && y - rowHeight < bottomY) {
+            cursor.page = pdfDoc.addPage([cursor.pageWidth, cursor.pageHeight]);
+            cursor.y = pageHeight - margin;
+            currentPage = cursor.page;
+            y = cursor.y;
+            drawHeaderRow(currentPage, y);
+            y -= rowHeight;
+        }
         const bg = idx % 2 === 1 ? rgb(rowAlt, rowAlt, rowAlt) : undefined;
         if (bg) {
-            page.drawRectangle({
+            currentPage.drawRectangle({
                 x: startX,
                 y: y - rowHeight,
                 width: tableWidth,
@@ -906,7 +935,7 @@ const drawTable = (page, fonts, cursor, columns, rows, options = {}) => {
                 borderWidth: 1
             });
         } else {
-            page.drawRectangle({
+            currentPage.drawRectangle({
                 x: startX,
                 y: y - rowHeight,
                 width: tableWidth,
@@ -922,12 +951,13 @@ const drawTable = (page, fonts, cursor, columns, rows, options = {}) => {
             const lines = wrapText(text, fonts.regular, PDF_LAYOUT.bodySize, maxW);
             lines.slice(0, 2).forEach((line, i) => {
                 const tx = alignRight ? col.x + col.width - cellPadH - fonts.regular.widthOfTextAtSize(line, PDF_LAYOUT.bodySize) : col.x + cellPadH;
-                page.drawText(line, { x: tx, y: y - cellPadV - (i + 1) * lineH, size: PDF_LAYOUT.bodySize, font: fonts.regular, color: gray });
+                currentPage.drawText(line, { x: tx, y: y - cellPadV - (i + 1) * lineH, size: PDF_LAYOUT.bodySize, font: fonts.regular, color: gray });
             });
         });
         y -= rowHeight;
     });
     cursor.y = y - PDF_LAYOUT.gapParagraph;
+    cursor.page = currentPage;
 };
 
 const generatePdf = async (options = {}) => {
@@ -965,22 +995,22 @@ const generatePdf = async (options = {}) => {
     };
 
     const addSectionTitle = (text, size = PDF_LAYOUT.sectionSize) => {
-        ensureSpace(pdfDoc, cursor, 28);
+        ensureSpace(pdfDoc, cursor, 36);
         cursor.page.drawText(text, { x: cursor.margin, y: cursor.y, size, font: fonts.bold, color: rgb(0.08, 0.08, 0.08) });
-        cursor.y -= Math.round(size * PDF_LAYOUT.lineHeight) + 4;
+        cursor.y -= Math.round(size * PDF_LAYOUT.lineHeight) + 10;
     };
 
     const addSubsectionTitle = (text) => {
-        ensureSpace(pdfDoc, cursor, 20);
+        ensureSpace(pdfDoc, cursor, 28);
         cursor.page.drawText(text, { x: cursor.margin, y: cursor.y, size: PDF_LAYOUT.subsectionSize, font: fonts.bold, color: rgb(0.1, 0.1, 0.1) });
-        cursor.y -= Math.round(PDF_LAYOUT.subsectionSize * PDF_LAYOUT.lineHeight) + 4;
+        cursor.y -= Math.round(PDF_LAYOUT.subsectionSize * PDF_LAYOUT.lineHeight) + 8;
     };
 
     // ========================================
     // PAGE 1: HEADER & SUMMARY
     // ========================================
     addLine(cursor.page, 'Aircraft Inspection Report', fonts, cursor, { size: PDF_LAYOUT.titleSize, font: fonts.bold, lineHeight: Math.round(PDF_LAYOUT.titleSize * PDF_LAYOUT.lineHeight) });
-    cursor.y -= PDF_LAYOUT.gapSection;
+    cursor.y -= PDF_LAYOUT.gapSection + 4;
 
     addSectionTitle('Aircraft Information');
     const aircraftRows = [
@@ -997,16 +1027,16 @@ const generatePdf = async (options = {}) => {
         [{ key: 'key', label: 'Field', width: 160 }, { key: 'value', label: 'Value', width: pageWidth - margin * 2 - 160 - 2 }],
         aircraftRows.map((r) => ({ key: r.key, value: r.value }))
     );
-    cursor.y -= PDF_LAYOUT.gapParagraph;
+    cursor.y -= PDF_LAYOUT.gapParagraph + 4;
 
     addSectionTitle('Inspection Authority');
     addKeyValue(cursor.page, 'Inspector Name', inspection.inspectorName || 'Not assigned', fonts, cursor);
-    cursor.y -= PDF_LAYOUT.gapParagraph;
+    cursor.y -= PDF_LAYOUT.gapParagraph + 4;
 
     addSectionTitle('Inspection Scope');
     addKeyValue(cursor.page, 'Areas Inspected', areasInspected.length ? areasInspected.join(', ') : 'Not recorded', fonts, cursor);
     addKeyValue(cursor.page, 'Inspection Method', 'Computer Vision Analysis', fonts, cursor);
-    cursor.y -= PDF_LAYOUT.gapParagraph;
+    cursor.y -= PDF_LAYOUT.gapParagraph + 4;
 
     addSectionTitle('Notes');
     const notesText = (reportOpts.notes || '').trim() || 'None';
@@ -1021,7 +1051,7 @@ const generatePdf = async (options = {}) => {
         lineHeight: notesLineHeight
     });
     cursor.y -= notesLineCount * notesLineHeight;
-    cursor.y -= PDF_LAYOUT.gapParagraph;
+    cursor.y -= PDF_LAYOUT.gapParagraph + 4;
 
     addSectionTitle('Findings Count Summary');
     const findingsSummaryText = `${includedDetections.length} finding(s) at current confidence threshold.`;
@@ -1034,13 +1064,11 @@ const generatePdf = async (options = {}) => {
     if (reportOpts.includeFlaggedImages) {
         const flaggedPhotos = photos.filter((photo) => photo && photo.flagged);
         if (flaggedPhotos.length > 0) {
-            cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
-            cursor.y = pageHeight - cursor.margin;
-            cursor.y -= PDF_LAYOUT.gapSection;
+            const flaggedImgH = 300;
+            ensureSpace(pdfDoc, cursor, PDF_LAYOUT.gapSection + 28 + flaggedImgH + 80);
             addSectionTitle('Flagged Images — Defects Requiring Attention');
             const imageMargin = 12;
             const flaggedImgW = 400;
-            const flaggedImgH = 300;
             const captionGap = 12;
             const gap = 24;
             let currentY = cursor.y;
@@ -1102,11 +1130,9 @@ const generatePdf = async (options = {}) => {
     }
 
     // ========================================
-    // PAGE 3: TECHNICAL REFERENCE
+    // TECHNICAL REFERENCE (new page only if needed)
     // ========================================
-    cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
-    cursor.y = pageHeight - cursor.margin;
-    cursor.y -= PDF_LAYOUT.gapSection;
+    ensureSpace(pdfDoc, cursor, PDF_LAYOUT.gapSection + 28 + 120);
     addSectionTitle('Aircraft Sectioning for Inspection Process');
     
     addSubsectionTitle('Section Color Legend');
@@ -1345,7 +1371,8 @@ const generatePdf = async (options = {}) => {
         currentX += view.width + viewSpacing;
     }
     
-    cursor.y = viewsStartY - maxViewHeight - PDF_LAYOUT.gapItem;
+    const viewLabelHeight = 26;
+    cursor.y = viewsStartY - maxViewHeight - viewLabelHeight - PDF_LAYOUT.gapItem;
     addSubsectionTitle('Heat Mapping Legend');
     const heatLegendText = 'Color intensity indicates defect concentration: White = 0 defects, Yellow-Orange gradient = 1-9 defects, Bright Red = 10+ defects. Heat mapping is overlaid on each section\'s designated color (Teal FWD, Green MID, Blue Wings, Red AFT, Purple Engines, Orange Vertical Stabilizer, Yellow Horizontal Stabilizer). Only inspected sections display color-coding; uninspected areas appear in neutral gray.';
     const heatLegendLines = wrapText(heatLegendText, fonts.regular, PDF_LAYOUT.captionSize, pageWidth - cursor.margin * 2);
@@ -1358,32 +1385,41 @@ const generatePdf = async (options = {}) => {
             color: rgb(PDF_LAYOUT.captionGray, PDF_LAYOUT.captionGray, PDF_LAYOUT.captionGray)
         });
     });
-    cursor.y -= heatLegendLines.length * 12 + PDF_LAYOUT.gapSection;
+    cursor.y -= heatLegendLines.length * 12 + PDF_LAYOUT.gapSection + 8;
 
     // ========================================
-    // PAGE 4: FINDINGS SUMMARY TABLE
+    // FINDINGS SUMMARY TABLE (continues from previous section; paginates if needed)
     // ========================================
-    cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
-    cursor.y = pageHeight - cursor.margin;
-    cursor.y -= PDF_LAYOUT.gapSection;
-    addSectionTitle('Findings Summary');
-    if (includedDetections.length > 0) {
-        const tableW = pageWidth - cursor.margin * 2;
-        const summaryCols = [
-            { key: 'id', label: 'ID', width: 52 },
-            { key: 'type', label: 'Defect Type', width: 170 },
-            { key: 'location', label: 'Location', width: 128 },
-            { key: 'photo', label: 'Photo #', width: 58, align: 'right' },
-            { key: 'confidence', label: 'Confidence', width: 72, align: 'right' }
-        ];
-        const summaryRows = includedDetections.map((detection, idx) => ({
+    const summaryRows = includedDetections.length > 0
+        ? includedDetections.map((detection, idx) => ({
             id: `F-${String(idx + 1).padStart(3, '0')}`,
             type: detection.class || 'Defect',
             location: detection.area || 'N/A',
             photo: `#${detection.photoNumber}`,
-            confidence: detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'N/A')
-        }));
-        drawTable(cursor.page, fonts, cursor, summaryCols, summaryRows);
+            confidence: detection.manual ? 'Manual' : (typeof detection.confidence === 'number' ? `${Math.round(detection.confidence * 100)}%` : 'N/A'),
+            note: (detection.note && String(detection.note).trim()) ? String(detection.note).trim() : '—'
+          }))
+        : [];
+    const lineH = PDF_LAYOUT.bodySize + 2;
+    const tableRowHeight = 2 * lineH + PDF_LAYOUT.cellPadV * 2 + (PDF_LAYOUT.tableRowGap || 4);
+    const findingsTableHeight = (1 + summaryRows.length) * tableRowHeight;
+    const footerClearance = 40;
+    const sectionTitleHeight = 28;
+    ensureSpace(pdfDoc, cursor, PDF_LAYOUT.gapSection + sectionTitleHeight + tableRowHeight + footerClearance);
+    addSectionTitle('Findings Summary');
+    if (includedDetections.length > 0) {
+        const summaryCols = [
+            { key: 'id', label: 'ID', width: 44 },
+            { key: 'type', label: 'Defect Type', width: 82 },
+            { key: 'location', label: 'Location', width: 82 },
+            { key: 'photo', label: 'Photo #', width: 48, align: 'right' },
+            { key: 'confidence', label: 'Confidence', width: 62, align: 'right' },
+            { key: 'note', label: 'Note', width: 150 }
+        ];
+        drawTable(cursor.page, fonts, cursor, summaryCols, summaryRows, {
+            pdfDoc,
+            contentBottomY: margin + PDF_FOOTER_CLEARANCE
+        });
     } else {
         cursor.page.drawText('No defects met the reporting criteria at the selected threshold.', {
             x: cursor.margin,
@@ -1400,15 +1436,15 @@ const generatePdf = async (options = {}) => {
     // ========================================
     if (includedDetections.length > 0) {
         cursor.y -= PDF_LAYOUT.gapSection;
-        ensureSpace(pdfDoc, cursor, 280);
+        ensureSpace(pdfDoc, cursor, 380);
         addSectionTitle('Detailed Findings');
 
         let findingIndex = 1;
         const BORDER_W = 4;
         const CARD_THUMB_W = 200;
         const CARD_THUMB_H = 150;
-        const CARD_GAP = 24;
-        const CARD_MIN_H = 240;
+        const CARD_GAP = 28;
+        const CARD_MIN_H = 320;
         const CARD_PAD = 20;
         const DETAILS_X = cursor.margin + BORDER_W + CARD_THUMB_W + CARD_PAD;
 
@@ -1605,12 +1641,10 @@ const generatePdf = async (options = {}) => {
     }
 
     // ========================================
-    // LAST PAGES: FULL RESOLUTION IMAGES (optional)
+    // FULL RESOLUTION IMAGES (optional; new page only if needed)
     // ========================================
     if (reportOpts.includeThumbnails && includedDetections.length > 0) {
-        cursor.page = pdfDoc.addPage([pageWidth, pageHeight]);
-        cursor.y = pageHeight - cursor.margin;
-        cursor.y -= PDF_LAYOUT.gapSection;
+        ensureSpace(pdfDoc, cursor, PDF_LAYOUT.gapSection + 28 + 200);
         addSectionTitle('Full Resolution Images');
         const photoMap = new Map();
         includedDetections.forEach((detection) => {

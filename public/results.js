@@ -18,7 +18,8 @@ import {
     togglePhotoFlagged,
     toInspectionAreaSlug,
     updateDetectionBbox,
-    updateDetectionClass
+    updateDetectionClass,
+    updateDetectionNote
 } from './state.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 
@@ -1293,6 +1294,39 @@ const renderDetectionList = (state, area, photo) => {
         typeSelect.addEventListener('click', (e) => e.stopPropagation());
         typeRow.append(typeLabel, typeSelect);
         body.appendChild(typeRow);
+
+        // Note section
+        const noteRow = document.createElement('div');
+        noteRow.className = 'detection-note-row';
+        const noteLabel = document.createElement('label');
+        noteLabel.className = 'detection-note-label';
+        noteLabel.textContent = 'Note:';
+        const noteInput = document.createElement('textarea');
+        noteInput.className = 'detection-note-input';
+        noteInput.rows = 2;
+        noteInput.placeholder = 'Add a note for this defect…';
+        noteInput.value = detection.note || '';
+        noteInput.setAttribute('aria-label', 'Note for this defect');
+        const commitNote = () => {
+            const value = noteInput.value.trim();
+            const current = (detection.note || '').trim();
+            if (value !== current) {
+                updateDetectionNote(detection.id, value);
+                render();
+            }
+        };
+        noteInput.addEventListener('blur', (e) => {
+            e.stopPropagation();
+            commitNote();
+        });
+        noteInput.addEventListener('change', (e) => {
+            e.stopPropagation();
+            commitNote();
+        });
+        noteInput.addEventListener('click', (e) => e.stopPropagation());
+        noteInput.addEventListener('keydown', (e) => e.stopPropagation());
+        noteRow.append(noteLabel, noteInput);
+        body.appendChild(noteRow);
 
         const actions = document.createElement('div');
         actions.className = 'detection-actions';
