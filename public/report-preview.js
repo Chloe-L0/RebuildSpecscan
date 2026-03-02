@@ -8,9 +8,14 @@ const reportPreviewLoading = document.getElementById('reportPreviewLoading');
 const reportPreviewPagination = document.getElementById('reportPreviewPagination');
 const reportPreviewWrap = document.getElementById('reportPreviewWrap');
 const reportPreviewPending = document.getElementById('reportPreviewPending');
+const reportPreviewPrev = document.getElementById('reportPreviewPrev');
+const reportPreviewNext = document.getElementById('reportPreviewNext');
+const reportPreviewPageInput = document.getElementById('reportPreviewPageInput');
+const reportPreviewPageCount = document.getElementById('reportPreviewPageCount');
 
 let lastRendered = { blob: null, pageCount: 0, findingPages: [], pageHeightPx: 992 };
 const PREVIEW_DEBOUNCE_MS = 3500;
+const PREVIEW_PAGE_GAP = 16;
 let previewDebounceTimer = null;
 
 /** Render PDF blob into a container (default: reportPreviewPages). Returns new pageHeightPx from first page. */
@@ -48,12 +53,47 @@ async function renderPdfToCanvases(blob, pageCount, targetContainer) {
     return firstPageHeight;
 }
 
+function getPageHeightWithGap() {
+    return (lastRendered.pageHeightPx || 992) + PREVIEW_PAGE_GAP;
+}
+
 function updatePaginationFromScroll() {
-    if (!reportPreviewWrap || !reportPreviewPagination) return;
-    const pageHeight = lastRendered.pageHeightPx || 992;
+    if (!reportPreviewWrap) return;
+    const step = getPageHeightWithGap();
     const scrollTop = reportPreviewWrap.scrollTop;
-    const current = Math.min(lastRendered.pageCount, Math.max(1, Math.floor(scrollTop / pageHeight) + 1));
-    reportPreviewPagination.textContent = `Page ${current} of ${lastRendered.pageCount || 1}`;
+    const current = Math.min(lastRendered.pageCount, Math.max(1, Math.floor(scrollTop / step) + 1));
+    if (reportPreviewPageInput && document.activeElement !== reportPreviewPageInput) {
+        reportPreviewPageInput.value = String(current);
+        reportPreviewPageInput.max = String(lastRendered.pageCount || 1);
+    }
+    if (reportPreviewPageCount) reportPreviewPageCount.textContent = String(lastRendered.pageCount || 1);
+    if (reportPreviewPrev) reportPreviewPrev.disabled = current <= 1;
+    if (reportPreviewNext) reportPreviewNext.disabled = current >= (lastRendered.pageCount || 1);
+}
+
+function goToPage(pageNum) {
+    if (!reportPreviewWrap) return;
+    const total = lastRendered.pageCount || 1;
+    const page = Math.max(1, Math.min(total, Math.floor(Number(pageNum)) || 1));
+    const step = getPageHeightWithGap();
+    const targetScroll = (page - 1) * step;
+    reportPreviewWrap.scrollTo({ top: targetScroll, behavior: 'smooth' });
+    if (reportPreviewPageInput) reportPreviewPageInput.value = String(page);
+}
+
+function goToPrevPage() {
+    if (!reportPreviewWrap) return;
+    const step = getPageHeightWithGap();
+    const newScroll = Math.max(0, reportPreviewWrap.scrollTop - step);
+    reportPreviewWrap.scrollTo({ top: newScroll, behavior: 'smooth' });
+}
+
+function goToNextPage() {
+    if (!reportPreviewWrap) return;
+    const step = getPageHeightWithGap();
+    const maxScroll = Math.max(0, (lastRendered.pageCount - 1) * step);
+    const newScroll = Math.min(maxScroll, reportPreviewWrap.scrollTop + step);
+    reportPreviewWrap.scrollTo({ top: newScroll, behavior: 'smooth' });
 }
 
 export async function refreshReportPreview() {
@@ -73,7 +113,15 @@ export async function refreshReportPreview() {
         };
         reportPreviewPages.innerHTML = '';
         while (fragment.firstChild) reportPreviewPages.appendChild(fragment.firstChild);
-        if (reportPreviewPagination) reportPreviewPagination.textContent = `Page 1 of ${lastRendered.pageCount}`;
+        const pageHeight = lastRendered.pageHeightPx || 992;
+        const wrapHeight = pageHeight + 32;
+        if (reportPreviewWrap) {
+            reportPreviewWrap.style.flex = 'none';
+            reportPreviewWrap.style.height = `${wrapHeight}px`;
+            reportPreviewWrap.style.maxHeight = `${wrapHeight}px`;
+            reportPreviewWrap.scrollTop = 0;
+        }
+        updatePaginationFromScroll();
     } catch (e) {
         console.error('Preview generation failed', e);
         const msg = (e && e.message) ? String(e.message).replace(/</g, '&lt;').replace(/>/g, '&gt;') : 'Unknown error';
@@ -96,15 +144,35 @@ export function scrollToFindingIndex(findingIndex) {
     const pages = lastRendered.findingPages;
     if (!pages || pages[findingIndex] == null || !reportPreviewWrap) return;
     const pageNum = pages[findingIndex];
-    const pageHeight = lastRendered.pageHeightPx || 992;
-    const targetScroll = (pageNum - 1) * pageHeight;
+    const step = getPageHeightWithGap();
+    const targetScroll = (pageNum - 1) * step;
     reportPreviewWrap.scrollTo({ top: targetScroll, behavior: 'smooth' });
-    if (reportPreviewPagination) reportPreviewPagination.textContent = `Page ${pageNum} of ${lastRendered.pageCount || 1}`;
+    updatePaginationFromScroll();
 }
 
 if (reportPreviewWrap) {
     reportPreviewWrap.addEventListener('scroll', updatePaginationFromScroll);
 }
+if (reportPreviewPrev) reportPreviewPrev.addEventListener('click', goToPrevPage);
+if (reportPreviewNext) reportPreviewNext.addEventListener('click', goToNextPage);
+
+if (reportPreviewPageInput) {
+    reportPreviewPageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            goToPage(reportPreviewPageInput.value);
+            reportPreviewPageInput.blur();
+        }
+    });
+    reportPreviewPageInput.addEventListener('change', () => goToPage(reportPreviewPageInput.value));
+}
+
+document.addEventListener('keydown', (e) => {
+    if (!reportPreviewWrap || !document.querySelector('.report-export-layout')) return;
+    if (e.target.closest('input') || e.target.closest('textarea') || e.target.closest('button')) return;
+    if (e.key === 'ArrowLeft') { goToPrevPage(); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { goToNextPage(); e.preventDefault(); }
+});
 
 window.addEventListener('report-state-changed', debouncedRefresh);
 window.scrollToFindingIndex = scrollToFindingIndex;

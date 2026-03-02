@@ -1196,6 +1196,82 @@ body[data-step="7"] .capture-header {
     flex-shrink: 0;
 }
 
+.report-preview-nav-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.report-preview-page-jump {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    color: #676767;
+    font-weight: 500;
+}
+
+.report-preview-page-jump-label {
+    white-space: nowrap;
+}
+
+.report-preview-page-jump #reportPreviewPageInput {
+    width: 48px;
+    padding: 6px 8px;
+    font-size: 14px;
+    text-align: center;
+    border: 1px solid rgba(16, 18, 26, 0.15);
+    border-radius: 6px;
+    background: #fff;
+    color: #142741;
+    box-sizing: border-box;
+}
+
+.report-preview-page-jump #reportPreviewPageInput:focus {
+    outline: none;
+    border-color: #b08d57;
+    box-shadow: 0 0 0 2px rgba(176, 141, 87, 0.2);
+}
+
+.report-preview-page-jump #reportPreviewPageInput::-webkit-inner-spin-button,
+.report-preview-page-jump #reportPreviewPageInput::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.report-preview-page-jump #reportPreviewPageInput[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.report-preview-nav-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(16, 18, 26, 0.12);
+    border-radius: 8px;
+    background: #fff;
+    color: #142741;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.report-preview-nav-btn:hover:not(:disabled) {
+    background: rgba(176, 141, 87, 0.1);
+    border-color: rgba(176, 141, 87, 0.4);
+    color: #b08d57;
+}
+
+.report-preview-nav-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .report-preview-pending {
     font-size: 13px;
     color: #3F5568;
@@ -1210,8 +1286,7 @@ body[data-step="7"] .capture-header {
     flex: 1;
     min-height: 520px;
     width: 100%;
-    overflow-y: auto;
-    overflow-x: auto;
+    overflow: hidden;
     padding: 16px;
     display: flex;
     flex-direction: column;

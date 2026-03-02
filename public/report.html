@@ -52,7 +52,18 @@
                 <!-- LEFT: PDF Preview (60%) -->
                 <div class="report-preview-column">
                     <div class="report-preview-toolbar">
-                        <span class="report-preview-pagination" id="reportPreviewPagination">Page 1 of 1</span>
+                        <div class="report-preview-nav-group">
+                            <button type="button" class="report-preview-nav-btn" id="reportPreviewPrev" aria-label="Previous page" title="Previous page">‹</button>
+                            <span class="report-preview-pagination">
+                                <label class="report-preview-page-jump">
+                                    <span class="report-preview-page-jump-label">Page</span>
+                                    <input type="number" id="reportPreviewPageInput" min="1" value="1" aria-label="Go to page number" title="Type page number and press Enter">
+                                    <span id="reportPreviewPageOf"> of </span>
+                                    <span id="reportPreviewPageCount">1</span>
+                                </label>
+                            </span>
+                            <button type="button" class="report-preview-nav-btn" id="reportPreviewNext" aria-label="Next page" title="Next page">›</button>
+                        </div>
                         <span class="report-preview-pending hidden" id="reportPreviewPending">Preview will update…</span>
                     </div>
                     <div class="report-preview-wrap" id="reportPreviewWrap">
