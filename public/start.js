@@ -4,11 +4,23 @@ import {
     getInspectionHistory,
     loadInspectionFromHistory,
     deleteInspectionFromHistory,
+    getBookmarkedIds,
+    isBookmarked,
+    toggleBookmark,
     getAllFlaggedImages,
     deleteFlaggedImage,
     getAllGeneralNotes,
-    deleteGeneralNote
+    deleteGeneralNote,
+    togglePhotoFlagged
 } from './state.js';
+
+const HISTORY_MODE_KEY = 'specscanHistoryMode';
+// Default to normal flow when landing on Step 1
+try {
+    sessionStorage.removeItem(HISTORY_MODE_KEY);
+} catch {
+    // ignore
+}
 
 const form = document.getElementById('startForm');
 const tailNumberInput = document.getElementById('tailNumber');
@@ -23,6 +35,12 @@ const historyBackdrop = document.getElementById('historyBackdrop');
 const historyList = document.getElementById('historyList');
 const historyEmpty = document.getElementById('historyEmpty');
 const historySearch = document.getElementById('historySearch');
+const bookmarkNavBtn = document.getElementById('bookmarkNavBtn');
+const bookmarkPanel = document.getElementById('bookmarkPanel');
+const bookmarkPanelClose = document.getElementById('bookmarkPanelClose');
+const bookmarkBackdrop = document.getElementById('bookmarkBackdrop');
+const bookmarkList = document.getElementById('bookmarkList');
+const bookmarkEmpty = document.getElementById('bookmarkEmpty');
 const flaggedImagesNavBtn = document.getElementById('flaggedImagesNavBtn');
 const flaggedImagesPanel = document.getElementById('flaggedImagesPanel');
 const flaggedImagesPanelClose = document.getElementById('flaggedImagesPanelClose');
@@ -133,6 +151,13 @@ const handleStart = () => {
         startedAt: new Date().toISOString()
     };
 
+    // Starting a new inspection should never be "history mode"
+    try {
+        sessionStorage.removeItem(HISTORY_MODE_KEY);
+    } catch {
+        // ignore
+    }
+
     setInspectionDetails(payload);
     window.location.href = 'capture.html';
 };
@@ -183,7 +208,9 @@ const renderHistoryList = () => {
     historyList.classList.remove('hidden');
     historyList.innerHTML = filtered
         .map(
-            (entry) => `
+            (entry) => {
+                const bookmarked = isBookmarked(entry.id);
+                return `
         <div class="history-item-wrapper">
             <button type="button" class="history-item" data-history-id="${entry.id}">
                 <p class="history-item-tail">${escapeHtml(entry.tailNumber || '—')}</p>
@@ -191,42 +218,61 @@ const renderHistoryList = () => {
                 <span class="history-item-type">${escapeHtml(entry.inspectionType || 'Outbound')}</span>
                 ${entry.photosCount != null ? `<p class="history-item-meta" style="margin-top:4px">${entry.photosCount} photo${entry.photosCount === 1 ? '' : 's'}</p>` : ''}
             </button>
+            <button type="button" class="history-item-bookmark-btn ${bookmarked ? 'is-bookmarked' : ''}" data-history-id="${entry.id}" aria-label="${bookmarked ? 'Remove bookmark' : 'Bookmark'}" title="${bookmarked ? 'Remove bookmark' : 'Bookmark'}">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="${bookmarked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+            </button>
             <button type="button" class="history-item-delete-btn" data-history-id="${entry.id}" aria-label="Delete">×</button>
         </div>
-        `
+        `;
+            }
         )
         .join('');
 
     // Add click handlers for loading inspections
     historyList.querySelectorAll('.history-item').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-            // Don't trigger if clicking on delete button
-            if (e.target.closest('.history-item-delete-btn')) return;
+        btn.addEventListener('click', async (e) => {
+            if (e.target.closest('.history-item-delete-btn') || e.target.closest('.history-item-bookmark-btn')) return;
             
             const id = btn.dataset.historyId;
             if (!id) return;
-            if (loadInspectionFromHistory(id)) {
+            if (await loadInspectionFromHistory(id)) {
                 closeHistoryPanel();
-                window.location.href = 'results.html';
+                try {
+                    sessionStorage.setItem(HISTORY_MODE_KEY, '1');
+                } catch {
+                    // ignore
+                }
+                window.location.href = 'report.html';
             } else {
-                alert('Could not load that inspection.');
+                alert('Could not load that inspection (it may not have been saved due to storage limits).');
             }
         });
     });
     
     // Add delete button handlers
     historyList.querySelectorAll('.history-item-delete-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const id = btn.dataset.historyId;
             if (!id) return;
             if (confirm('Delete this inspection from history?')) {
-                if (deleteInspectionFromHistory(id)) {
+                if (await deleteInspectionFromHistory(id)) {
                     renderHistoryList();
                 } else {
                     alert('Failed to delete inspection.');
                 }
             }
+        });
+    });
+
+    // Bookmark button: toggle bookmark and refresh list
+    historyList.querySelectorAll('.history-item-bookmark-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const id = btn.dataset.historyId;
+            if (!id) return;
+            toggleBookmark(id);
+            renderHistoryList();
         });
     });
 };
@@ -243,11 +289,27 @@ const openHistoryPanel = () => {
     historyBackdrop?.classList.remove('hidden');
     historyBackdrop?.classList.add('is-visible');
     historyBackdrop?.setAttribute('aria-hidden', 'false');
-    renderHistoryList();
+    try {
+        renderHistoryList();
+    } catch (e) {
+        console.error('Inspection history failed to load', e);
+        if (historyList) {
+            historyList.innerHTML = '';
+            historyList.classList.add('hidden');
+        }
+        if (historyEmpty) {
+            historyEmpty.classList.remove('hidden');
+            const title = historyEmpty.querySelector('.history-empty-title');
+            const desc = historyEmpty.querySelector('.history-empty-desc');
+            if (title) title.textContent = 'Could not load inspection history';
+            if (desc) desc.textContent = 'Storage may be unavailable or the data is unavailable. Try again or complete a new inspection.';
+        }
+    }
     historySearch?.focus();
 };
 
 const closeHistoryPanel = () => {
+    historyNavBtn?.focus();
     historyPanel?.classList.remove('is-open');
     historyPanel?.setAttribute('aria-hidden', 'true');
     historyBackdrop?.classList.remove('is-visible');
@@ -261,6 +323,79 @@ historyBackdrop?.addEventListener('click', closeHistoryPanel);
 historySearch?.addEventListener('input', () => renderHistoryList());
 historySearch?.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeHistoryPanel();
+});
+
+// ---------------------------------------------------------------------------
+// Bookmarks panel (bookmark icon)
+// ---------------------------------------------------------------------------
+const renderBookmarkList = () => {
+    const bookmarkedIds = getBookmarkedIds();
+    const list = getInspectionHistory().filter((entry) => bookmarkedIds.includes(entry.id));
+    if (!bookmarkList || !bookmarkEmpty) return;
+    if (list.length === 0) {
+        bookmarkList.innerHTML = '';
+        bookmarkList.classList.add('hidden');
+        bookmarkEmpty.classList.remove('hidden');
+        return;
+    }
+    bookmarkEmpty.classList.add('hidden');
+    bookmarkList.classList.remove('hidden');
+    bookmarkList.innerHTML = list
+        .map(
+            (entry) => `
+        <div class="history-item-wrapper">
+            <button type="button" class="history-item" data-history-id="${entry.id}">
+                <p class="history-item-tail">${escapeHtml(entry.tailNumber || '—')}</p>
+                <p class="history-item-meta">${escapeHtml(formatHistoryDate(entry.startedAt))} · ${escapeHtml(entry.inspectorName || '—')}</p>
+                <span class="history-item-type">${escapeHtml(entry.inspectionType || 'Outbound')}</span>
+                ${entry.photosCount != null ? `<p class="history-item-meta" style="margin-top:4px">${entry.photosCount} photo${entry.photosCount === 1 ? '' : 's'}</p>` : ''}
+            </button>
+        </div>
+        `
+        )
+        .join('');
+    bookmarkList.querySelectorAll('.history-item').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const id = btn.dataset.historyId;
+            if (!id) return;
+            if (await loadInspectionFromHistory(id)) {
+                closeBookmarkPanel();
+                try {
+                    sessionStorage.setItem(HISTORY_MODE_KEY, '1');
+                } catch {
+                    // ignore
+                }
+                window.location.href = 'report.html';
+            } else {
+                alert('Could not load that inspection (it may not have been saved due to storage limits).');
+            }
+        });
+    });
+};
+
+const openBookmarkPanel = () => {
+    bookmarkPanel?.classList.add('is-open');
+    bookmarkPanel?.setAttribute('aria-hidden', 'false');
+    bookmarkBackdrop?.classList.remove('hidden');
+    bookmarkBackdrop?.classList.add('is-visible');
+    bookmarkBackdrop?.setAttribute('aria-hidden', 'false');
+    renderBookmarkList();
+};
+
+const closeBookmarkPanel = () => {
+    bookmarkNavBtn?.focus();
+    bookmarkPanel?.classList.remove('is-open');
+    bookmarkPanel?.setAttribute('aria-hidden', 'true');
+    bookmarkBackdrop?.classList.remove('is-visible');
+    bookmarkBackdrop?.classList.add('hidden');
+    bookmarkBackdrop?.setAttribute('aria-hidden', 'true');
+};
+
+bookmarkNavBtn?.addEventListener('click', openBookmarkPanel);
+bookmarkPanelClose?.addEventListener('click', closeBookmarkPanel);
+bookmarkBackdrop?.addEventListener('click', closeBookmarkPanel);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && bookmarkPanel?.classList.contains('is-open')) closeBookmarkPanel();
 });
 
 // ---------------------------------------------------------------------------
@@ -288,8 +423,39 @@ const matchesFlaggedSearch = (item, q) => {
     return area.includes(lower) || note.includes(lower) || tail.includes(lower);
 };
 
-const renderFlaggedImagesList = () => {
-    const list = getAllFlaggedImages();
+/** Build list of flagged images: current session from state first, then stored (excluding current session). */
+const getMergedFlaggedImagesList = async () => {
+    const state = readState();
+    const inspection = state?.inspection;
+    const photos = state?.photos || [];
+    const currentFlagged = photos
+        .filter((p) => p && p.flagged)
+        .map((photo) => ({
+            storageId: `current-${inspection?.startedAt ?? ''}-${photo.id}`,
+            id: photo.id,
+            number: photo.number,
+            name: photo.name,
+            dataURL: photo.dataURL,
+            area: photo.area || null,
+            flaggedNote: photo.flaggedNote || '',
+            flaggedAt: new Date().toISOString(),
+            inspection: inspection ? {
+                tailNumber: inspection.tailNumber || '',
+                inspectionType: inspection.inspectionType || '',
+                inspectorName: inspection.inspectorName || '',
+                startedAt: inspection.startedAt || null
+            } : null,
+            isCurrentSession: true
+        }));
+    const stored = await getAllFlaggedImages();
+    const storedFiltered = stored.filter(
+        (item) => item.inspection?.startedAt !== inspection?.startedAt
+    );
+    return [...currentFlagged, ...storedFiltered];
+};
+
+const renderFlaggedImagesList = async () => {
+    const list = await getMergedFlaggedImagesList();
     const query = (flaggedImagesSearch?.value || '').trim();
     const filtered = query ? list.filter((item) => matchesFlaggedSearch(item, query)) : list;
 
@@ -314,7 +480,12 @@ const renderFlaggedImagesList = () => {
     
     flaggedImagesList.innerHTML = sorted
         .map(
-            (item) => `
+            (item) => {
+                const isCurrent = Boolean(item.isCurrentSession);
+                const deleteAttrs = isCurrent
+                    ? `data-current="true" data-photo-id="${item.id}" data-flagged-id="${escapeHtml(item.storageId)}"`
+                    : `data-flagged-id="${escapeHtml(item.storageId || item.id)}"`;
+                return `
         <div class="flagged-image-item-panel">
             <div class="flagged-image-item-header">
                 <div class="flagged-image-item-info">
@@ -322,10 +493,10 @@ const renderFlaggedImagesList = () => {
                     <p class="flagged-image-item-meta">${escapeHtml(formatFlaggedDate(item.flaggedAt))}</p>
                     ${item.inspection?.tailNumber ? `<p class="flagged-image-item-meta">Tail: ${escapeHtml(item.inspection.tailNumber)}</p>` : ''}
                 </div>
-                <button type="button" class="flagged-image-delete-btn" data-flagged-id="${item.storageId || item.id}" aria-label="Delete">×</button>
+                <button type="button" class="flagged-image-delete-btn" ${deleteAttrs} aria-label="Remove from flagged">×</button>
             </div>
             <div class="flagged-image-item-preview">
-                <img src="${escapeHtml(item.dataURL)}" alt="Photo #${escapeHtml(item.number || '—')}" style="max-width: 100%; max-height: 200px; border-radius: 4px; object-fit: contain;">
+                <img src="${item.dataURL ? escapeHtml(item.dataURL) : ''}" alt="Photo #${escapeHtml(item.number || '—')}" style="max-width: 100%; max-height: 200px; border-radius: 4px; object-fit: contain;">
             </div>
             ${item.flaggedNote ? `
             <div class="flagged-image-item-note">
@@ -334,22 +505,10 @@ const renderFlaggedImagesList = () => {
             </div>
             ` : ''}
         </div>
-        `
+        `;
+            }
         )
         .join('');
-
-    // Add delete button handlers
-    flaggedImagesList.querySelectorAll('.flagged-image-delete-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const id = btn.dataset.flaggedId;
-            if (!id) return;
-            if (confirm('Delete this flagged image?')) {
-                deleteFlaggedImage(id);
-                renderFlaggedImagesList();
-            }
-        });
-    });
 };
 
 const openFlaggedImagesPanel = () => {
@@ -363,12 +522,33 @@ const openFlaggedImagesPanel = () => {
 };
 
 const closeFlaggedImagesPanel = () => {
+    flaggedImagesNavBtn?.focus();
     flaggedImagesPanel?.classList.remove('is-open');
     flaggedImagesPanel?.setAttribute('aria-hidden', 'true');
     flaggedImagesBackdrop?.classList.remove('is-visible');
     flaggedImagesBackdrop?.classList.add('hidden');
     flaggedImagesBackdrop?.setAttribute('aria-hidden', 'true');
 };
+
+// Delete/remove flagged item: use delegation so it works after list re-renders
+flaggedImagesList?.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.flagged-image-delete-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const isCurrent = btn.getAttribute('data-current') === 'true';
+    const photoId = btn.getAttribute('data-photo-id');
+    const storageId = btn.getAttribute('data-flagged-id');
+    if (!storageId && !photoId) return;
+    if (!confirm('Remove this image from flagged?')) return;
+    if (isCurrent && photoId != null && photoId !== '') {
+        const numId = /^\d+$/.test(String(photoId)) ? parseInt(photoId, 10) : null;
+        if (numId != null) togglePhotoFlagged(numId);
+    } else if (storageId) {
+        await deleteFlaggedImage(storageId);
+    }
+    await renderFlaggedImagesList();
+});
 
 flaggedImagesNavBtn?.addEventListener('click', openFlaggedImagesPanel);
 flaggedImagesPanelClose?.addEventListener('click', closeFlaggedImagesPanel);
@@ -474,6 +654,7 @@ const openClipboardPanel = () => {
 };
 
 const closeClipboardPanel = () => {
+    clipboardNavBtn?.focus();
     clipboardPanel?.classList.remove('is-open');
     clipboardPanel?.setAttribute('aria-hidden', 'true');
     clipboardBackdrop?.classList.remove('is-visible');

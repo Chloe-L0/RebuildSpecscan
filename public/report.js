@@ -10,7 +10,8 @@ import {
     updateDetectionNote,
     updatePhotoFlaggedNote,
     updateReportOptions,
-    saveGeneralNoteToStorage
+    saveGeneralNoteToStorage,
+    saveInspectionToHistory
 } from './state.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 import { PDFDocument, StandardFonts, rgb } from 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
@@ -54,6 +55,20 @@ const flaggedImagesNotesSection = document.getElementById('flaggedImagesNotesSec
 const logoBtn = document.getElementById('logoBtn');
 const backToResultsBtn = document.getElementById('backToResultsBtn');
 const submitInspectionBtn = document.getElementById('submitInspectionBtn');
+
+const HISTORY_MODE_KEY = 'specscanHistoryMode';
+const inHistoryMode = (() => {
+    try {
+        return sessionStorage.getItem(HISTORY_MODE_KEY) === '1';
+    } catch {
+        return false;
+    }
+})();
+
+if (inHistoryMode && backToResultsBtn) {
+    backToResultsBtn.style.display = 'none';
+    backToResultsBtn.setAttribute('aria-hidden', 'true');
+}
 
 const dispatchReportStateChanged = () => window.dispatchEvent(new CustomEvent('report-state-changed'));
 
@@ -1796,6 +1811,7 @@ reportNotesEl?.addEventListener('blur', () => {
 });
 
 backToResultsBtn?.addEventListener('click', () => {
+    if (inHistoryMode) return;
     window.location.href = 'results.html';
 });
 
@@ -1841,6 +1857,7 @@ logoBtn?.addEventListener('click', () => {
 
 const initialState = ensureAnalysisComplete();
 if (initialState) {
+    saveInspectionToHistory(initialState);
     renderSummary();
     dispatchReportStateChanged();
 }

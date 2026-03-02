@@ -12,28 +12,23 @@
         <button class="nav-icon" title="Info">
             <span class="icon-text">ii</span>
         </button>
-        <button class="nav-icon" id="clipboardNavBtn" title="General Notes" aria-label="Open general notes">
+        <button type="button" class="nav-icon" id="clipboardNavBtn" title="General Notes" aria-label="Open general notes">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
             </svg>
         </button>
-        <button class="nav-icon" id="historyNavBtn" title="Inspection History" aria-label="Open inspection history">
+        <button type="button" class="nav-icon" id="historyNavBtn" title="Inspection History" aria-label="Open inspection history">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"/>
                 <path d="M12 6v6l4 2"/>
             </svg>
         </button>
-        <button class="nav-icon" title="Bookmark">
+        <button type="button" class="nav-icon" id="bookmarkNavBtn" title="Bookmarks" aria-label="Open bookmarks">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
             </svg>
         </button>
-        <button class="nav-icon" title="Messages">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-        </button>
-        <button class="nav-icon" id="flaggedImagesNavBtn" title="Flagged Images" aria-label="Open flagged images">
+        <button type="button" class="nav-icon" id="flaggedImagesNavBtn" title="Flagged Images" aria-label="Open flagged images">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
                 <line x1="4" y1="22" x2="4" y2="15"/>
@@ -174,6 +169,20 @@
         </div>
     </aside>
     <div class="history-panel-backdrop hidden" id="historyBackdrop" aria-hidden="true"></div>
+
+    <!-- Bookmarks slide-out panel -->
+    <aside id="bookmarkPanel" class="history-panel" aria-hidden="true">
+        <div class="history-panel-header">
+            <h2 class="history-panel-title">Bookmarks</h2>
+            <button type="button" class="history-panel-close" id="bookmarkPanelClose" aria-label="Close">×</button>
+        </div>
+        <div class="history-panel-list" id="bookmarkList"></div>
+        <div class="history-empty hidden" id="bookmarkEmpty">
+            <p class="history-empty-title">No bookmarks yet</p>
+            <p class="history-empty-desc">Open Inspection History and bookmark sessions to see them here.</p>
+        </div>
+    </aside>
+    <div class="history-panel-backdrop hidden" id="bookmarkBackdrop" aria-hidden="true"></div>
 
     <!-- Flagged Images slide-out panel -->
     <aside id="flaggedImagesPanel" class="history-panel" aria-hidden="true">

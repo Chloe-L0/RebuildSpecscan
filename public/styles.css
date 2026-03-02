@@ -2506,7 +2506,10 @@ body[data-step="7"] .capture-header {
 
 /* Sidebar Navigation */
 .sidebar-nav {
+    position: relative;
+    z-index: 100;
     width: 64px;
+    flex-shrink: 0;
     background: #FFFFFF;
     display: flex;
     flex-direction: column;
@@ -2535,14 +2538,12 @@ body[data-step="7"] .capture-header {
     color: #142741;
 }
 
-/* Bookmark and Messages icons with 30% black opacity background */
-.nav-icon[title="Bookmark"],
-.nav-icon[title="Messages"] {
+/* Bookmark icon with 30% black opacity background */
+.nav-icon[title="Bookmark"] {
     background: rgba(0, 0, 0, 0.3);
 }
 
-.nav-icon[title="Bookmark"]:hover,
-.nav-icon[title="Messages"]:hover {
+.nav-icon[title="Bookmark"]:hover {
     background: rgba(0, 0, 0, 0.4);
     color: #142741;
 }
@@ -2678,6 +2679,36 @@ body[data-step="7"] .capture-header {
     background: rgba(176, 141, 87, 0.06);
     border-color: rgba(176, 141, 87, 0.35);
     box-shadow: 0 2px 12px rgba(176, 141, 87, 0.12);
+}
+
+.history-item-bookmark-btn {
+    width: 40px;
+    border: none;
+    border-left: none;
+    background: #FFFFFF;
+    color: #9ca3af;
+    cursor: pointer;
+    border: 1px solid rgba(16, 18, 26, 0.08);
+    border-left: none;
+    border-radius: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease, color 0.2s ease;
+    flex-shrink: 0;
+}
+
+.history-item-bookmark-btn:hover {
+    background: rgba(176, 141, 87, 0.08);
+    color: #b08d57;
+}
+
+.history-item-bookmark-btn.is-bookmarked {
+    color: #b08d57;
+}
+
+.history-item-bookmark-btn.is-bookmarked:hover {
+    color: #92400e;
 }
 
 .history-item-delete-btn {
