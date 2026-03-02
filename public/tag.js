@@ -17,6 +17,8 @@ const hotspotButtons = hotspotToolbar ? Array.from(hotspotToolbar.querySelectorA
 const SELECTED_AREA_KEY = 'selectedArea';
 
 const selected = new Set();
+/** @type {string | null} Last clicked photo id, used as range anchor for shift-click */
+let lastClickedPhotoId = null;
 
 const ensurePhotos = () => {
     const state = readState();
@@ -138,9 +140,49 @@ const toggleSelection = (photoId, forceState) => {
     renderPhotos();
 };
 
+const HINT_DURATION_MS = 1000;
+const HINT_FADE_MS = 200;
+
+/** Show "Please assign area" next to the + button and outline the hotspot toolbar for 1s with fade in/out */
+const showAssignAreaPrompt = (photoId) => {
+    const card = tagGrid?.querySelector(`[data-photo-id="${photoId}"]`);
+    if (!card || !hotspotToolbar) return;
+    const footer = card.querySelector('footer');
+    const addBtn = footer?.querySelector('.tag-add-btn');
+    if (!footer || !addBtn) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'tag-assign-hint-row';
+    addBtn.parentNode.insertBefore(wrapper, addBtn);
+    wrapper.appendChild(addBtn);
+
+    const hint = document.createElement('span');
+    hint.className = 'tag-assign-hint';
+    hint.textContent = 'Please assign area';
+    wrapper.appendChild(hint);
+
+    requestAnimationFrame(() => {
+        hint.classList.add('visible');
+        hotspotToolbar.classList.add('prompt-outline');
+    });
+
+    const clearPrompt = () => {
+        hint.classList.remove('visible');
+        hotspotToolbar.classList.remove('prompt-outline');
+        setTimeout(() => {
+            if (wrapper.parentNode) {
+                wrapper.parentNode.insertBefore(addBtn, wrapper);
+                wrapper.remove();
+            }
+        }, HINT_FADE_MS);
+    };
+    setTimeout(clearPrompt, HINT_DURATION_MS);
+};
+
 const createPhotoCard = (photo) => {
     const card = document.createElement('div');
     card.className = 'select-card';
+    card.dataset.photoId = photo.id;
     // Check if photo is selected - this should be false after clearing
     const isSelected = selected.has(photo.id);
     if (isSelected) {
@@ -183,16 +225,37 @@ const createPhotoCard = (photo) => {
         addBtn.addEventListener('click', (event) => {
             event.stopPropagation();
             toggleSelection(photo.id);
+            showAssignAreaPrompt(photo.id);
         });
         footer.appendChild(addBtn);
     }
 
     card.append(thumb, footer);
     
-    // Add click handler for card selection
+    // Add click handler for card selection (single toggle, or shift-click range)
     const handleCardClick = (event) => {
         if (addBtn && (event.target === addBtn || event.target.closest('.tag-add-btn'))) return;
-        toggleSelection(photo.id);
+        const state = readState();
+        const photos = state.photos;
+        const currentIndex = photos.findIndex((p) => p.id === photo.id);
+        if (currentIndex === -1) {
+            toggleSelection(photo.id);
+            lastClickedPhotoId = photo.id;
+            return;
+        }
+        if (event.shiftKey && lastClickedPhotoId != null) {
+            const lastIndex = photos.findIndex((p) => p.id === lastClickedPhotoId);
+            const from = lastIndex === -1 ? currentIndex : Math.min(lastIndex, currentIndex);
+            const to = lastIndex === -1 ? currentIndex : Math.max(lastIndex, currentIndex);
+            for (let i = from; i <= to; i++) {
+                selected.add(photos[i].id);
+            }
+            lastClickedPhotoId = photo.id;
+            renderPhotos();
+        } else {
+            toggleSelection(photo.id);
+            lastClickedPhotoId = photo.id;
+        }
     };
     card.addEventListener('click', handleCardClick);
 
@@ -262,6 +325,7 @@ hotspotButtons.forEach((button) => {
 selectAllBtn?.addEventListener('click', () => {
     const state = readState();
     selected.clear();
+    lastClickedPhotoId = null;
     state.photos
         .filter((photo) => !photo.area)
         .forEach((photo) => selected.add(photo.id));

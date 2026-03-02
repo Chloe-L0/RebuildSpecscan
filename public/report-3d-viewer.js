@@ -1,4 +1,4 @@
-import { readState } from './state.js';
+import { getThresholdForPhoto, readState } from './state.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -79,32 +79,23 @@ const calculateHeatColor = (defectCount, sectionName) => {
     return new THREE.Color(r, g, b);
 };
 
-// Count defects for a specific area, filtering by confidence threshold
+// Count defects for a specific area, filtering by per-image confidence threshold
 const countDefectsByArea = (state, area) => {
-    const threshold = state.analysis.threshold || 0.5;
     let count = 0;
-    
     state.detections.forEach((detection) => {
         const photo = state.photos.find((p) => p.id === detection.photoId);
         if (photo?.area === area) {
-            // Skip false positives
             if (detection.falsePositive) return;
-            
-            // Manual detections always count (they bypass threshold)
             if (detection.manual) {
                 count++;
                 return;
             }
-            
-            // Filter by confidence threshold
-            if (typeof detection.confidence === 'number') {
-                if (detection.confidence >= threshold) {
-                    count++;
-                }
+            const threshold = getThresholdForPhoto(state, detection.photoId);
+            if (typeof detection.confidence === 'number' && detection.confidence >= threshold) {
+                count++;
             }
         }
     });
-    
     return count;
 };
 

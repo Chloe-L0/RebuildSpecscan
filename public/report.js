@@ -1,5 +1,6 @@
 import {
     AREAS,
+    getThresholdForPhoto,
     readState,
     removeDetection,
     restoreDetection,
@@ -86,13 +87,11 @@ const formatMeta = (state) => {
 const computeDetectionTotals = (state, includeFalsePositives) =>
     state.detections.filter((detection) => {
         if (!includeFalsePositives && detection.falsePositive) return false;
-        // Manual detections are always included
         if (detection.manual) return true;
-        // For confidence-based filtering: only include detections with valid confidence >= threshold
         if (typeof detection.confidence === 'number') {
-            return detection.confidence >= state.analysis.threshold;
+            const threshold = getThresholdForPhoto(state, detection.photoId);
+            return detection.confidence >= threshold;
         }
-        // Exclude detections without valid confidence values
         return false;
     }).length;
 
@@ -618,7 +617,10 @@ const filterIncludedDetections = (state) => {
     return state.detections.filter((detection) => {
         if (detection.falsePositive) return false;
         if (detection.manual) return true;
-        if (typeof detection.confidence === 'number' && detection.confidence < state.analysis.threshold) return false;
+        if (typeof detection.confidence === 'number') {
+            const threshold = getThresholdForPhoto(state, detection.photoId);
+            if (detection.confidence < threshold) return false;
+        }
         return true;
     });
 };

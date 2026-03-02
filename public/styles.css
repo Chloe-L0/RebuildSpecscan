@@ -249,6 +249,12 @@ a {
     border: 1px solid rgba(16, 18, 26, 0.15);
 }
 
+.secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: var(--muted);
+}
+
 .secondary.flagged {
     background: #dc2626;
     color: #ffffff;
@@ -283,7 +289,7 @@ a {
 }
 
 .primary:not(:disabled):hover,
-.secondary:hover,
+.secondary:not(:disabled):hover,
 .ghost:hover,
 .danger:hover {
     transform: translateY(-1px);
@@ -812,6 +818,15 @@ textarea:focus {
     font-size: 16px;
 }
 
+.viewer-drag-hint {
+    margin: 8px 0 12px 0;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 500;
+    flex-basis: 100%;
+    width: 100%;
+}
+
 .slider-group {
     display: flex;
     align-items: center;
@@ -952,6 +967,38 @@ input[type="range"] {
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+}
+
+.detection-type-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.detection-type-label {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.detection-type-select {
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(16, 18, 26, 0.15);
+    background: var(--surface);
+    color: inherit;
+    min-width: 140px;
+    flex: 1;
+    max-width: 180px;
+    cursor: pointer;
+    appearance: auto;
+}
+
+.detection-type-select:focus {
+    outline: none;
+    border-color: var(--accent, #3F5568);
 }
 
 .detection-actions {
@@ -3273,8 +3320,8 @@ body.capture-page {
     letter-spacing: 0.15em;
     color: #858585;
     margin: 0;
-    text-align: center;
-    justify-self: center;
+    text-align: left;
+    justify-self: start;
 }
 
 .profile-icon {
@@ -3646,7 +3693,7 @@ body.capture-page {
         font-size: 12px;
         order: 3;
         width: 100%;
-        text-align: center;
+        text-align: left;
     }
     
     .capture-card-content {
@@ -3898,6 +3945,15 @@ body[data-step="4"] .capture-header {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+    outline: 2px solid transparent;
+    outline-offset: 4px;
+    border-radius: 10px;
+    transition: outline-color 0.2s ease, outline-width 0.2s ease;
+}
+
+.hotspot-toolbar.prompt-outline {
+    outline-color: #2d5016;
+    outline-width: 2px;
 }
 
 .area-hotspot {
@@ -3936,11 +3992,26 @@ body[data-step="4"] .capture-header {
     overflow: hidden;
     background: #f4f5f5;
     margin-top: 8px;
+    position: relative;
 }
 
 .tag-viewer .plane-viewer {
     width: 100%;
     height: 100%;
+}
+
+.tag-viewer-hint {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: rgba(16, 18, 26, 0.75);
+    background: linear-gradient(to top, rgba(244, 245, 245, 0.95), transparent);
+    text-align: center;
+    pointer-events: none;
 }
 
 /* Updated select grid for tag page */
@@ -4050,6 +4121,27 @@ body[data-step="4"] .capture-header {
 .tag-content-grid .tag-add-btn:hover {
     background: #e0e0e0;
     border-color: rgba(16, 18, 26, 0.3);
+}
+
+/* "Please assign area" hint row (button + text) */
+.tag-assign-hint-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    align-self: flex-start;
+}
+
+.tag-assign-hint {
+    font-size: 12px;
+    color: #2d5016;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.tag-assign-hint.visible {
+    opacity: 1;
 }
 
 /* Responsive adjustments for tag page */

@@ -3,6 +3,7 @@ import {
     addManualDetection,
     dataURLToFile,
     getAreaColor,
+    getThresholdForPhoto,
     readState,
     recordDetections,
     removeDetection,
@@ -11,13 +12,18 @@ import {
     setAnalysisThreshold,
     setCurrentAreaView,
     setCurrentPhotoIndex,
+    setPhotoThreshold,
     summarizeDetectionsByArea,
     toggleFalsePositive,
     togglePhotoFlagged,
     toInspectionAreaSlug,
-    updateDetectionBbox
+    updateDetectionBbox,
+    updateDetectionClass
 } from './state.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
+
+/** Default defect type options for manual detection and for changing type on cards */
+const DETECTION_TYPES = ['Scratch', 'Dent', 'Crack', 'Corrosion', 'Paint Damage', 'Other'];
 
 // Color palette for different defect classes
 const DEFECT_COLORS = [
@@ -547,8 +553,8 @@ const showDefectTypeDialog = () => {
         instructions.style.fontSize = '14px';
         dialog.appendChild(instructions);
         
-        // Common defect types
-        const commonTypes = ['Scratch', 'Dent', 'Crack', 'Corrosion', 'Paint Damage', 'Other'];
+        // Common defect types (shared with detection card type selector)
+        const commonTypes = DETECTION_TYPES;
         const typeButtons = document.createElement('div');
         typeButtons.style.display = 'flex';
         typeButtons.style.flexWrap = 'wrap';
@@ -807,7 +813,7 @@ const runAnalysis = async () => {
 };
 
 const renderTabs = (state) => {
-    const counts = summarizeDetectionsByArea(state, { threshold: state.analysis.threshold });
+    const counts = summarizeDetectionsByArea(state);
     const activeArea = state.analysis.currentArea || AREAS[0];
     const hasTaggedImages = (area) => state.photos.some((p) => Boolean(p.area) && p.area === area);
     areaTabs.innerHTML = '';
@@ -841,8 +847,8 @@ const renderTabs = (state) => {
 };
 
 const filterDetections = (state, area, options = {}) => {
-    const { photoId, includeFalsePositives = false } = options;
-    const threshold = state.analysis.threshold;
+    const { photoId, includeFalsePositives = false, threshold: optionThreshold } = options;
+    const threshold = optionThreshold !== undefined ? optionThreshold : state.analysis.threshold;
     return state.detections.filter((detection) => {
         if (detection.area !== area) return false;
         if (photoId !== undefined && detection.photoId !== photoId) return false;
@@ -868,8 +874,12 @@ const renderOverlay = (state, photo) => {
     overlayLayer.innerHTML = '';
     if (!photo || !resultImage.complete) return;
 
-    // Hide false positives on the main image overlay
-    const detections = filterDetections(state, photo.area, { photoId: photo.id, includeFalsePositives: false });
+    // Hide false positives on the main image overlay; use this image's confidence threshold
+    const detections = filterDetections(state, photo.area, {
+        photoId: photo.id,
+        includeFalsePositives: false,
+        threshold: getThresholdForPhoto(state, photo.id)
+    });
     if (!detections.length) return;
 
     // Get the container (viewer-stage) dimensions
@@ -1110,10 +1120,11 @@ const renderOverlay = (state, photo) => {
 
 const renderDetectionList = (state, area, photo) => {
     detectionList.innerHTML = '';
-    // Filter detections by area and current photo (if photo is provided)
+    // Filter detections by area and current photo (if photo is provided); use this image's confidence threshold
     const filterOptions = { includeFalsePositives: true };
     if (photo) {
         filterOptions.photoId = photo.id;
+        filterOptions.threshold = getThresholdForPhoto(state, photo.id);
     }
     const relevantDetections = filterDetections(state, area, filterOptions);
     if (!relevantDetections.length) {
@@ -1124,7 +1135,9 @@ const renderDetectionList = (state, area, photo) => {
 
     detectionList.classList.remove('hidden');
     emptyDetectionState.classList.add('hidden');
-    const threshold = Math.round(state.analysis.threshold * 100);
+    const threshold = photo
+        ? Math.round(getThresholdForPhoto(state, photo.id) * 100)
+        : Math.round(state.analysis.threshold * 100);
 
     relevantDetections.forEach((detection) => {
         const card = document.createElement('article');
@@ -1232,6 +1245,54 @@ const renderDetectionList = (state, area, photo) => {
         }
 
         body.appendChild(meta);
+
+        // Detection type: dropdown so user can choose defect type
+        const typeRow = document.createElement('div');
+        typeRow.className = 'detection-type-row';
+        const typeLabel = document.createElement('span');
+        typeLabel.className = 'detection-type-label';
+        typeLabel.textContent = 'Type:';
+        const typeSelect = document.createElement('select');
+        typeSelect.className = 'detection-type-select';
+        typeSelect.setAttribute('aria-label', 'Defect type');
+        const currentClass = detection.class || 'Defect';
+        const optionsSet = new Set(DETECTION_TYPES);
+        if (currentClass && !optionsSet.has(currentClass)) {
+            const customOpt = document.createElement('option');
+            customOpt.value = currentClass;
+            customOpt.textContent = currentClass;
+            typeSelect.appendChild(customOpt);
+        }
+        DETECTION_TYPES.forEach((opt) => {
+            const option = document.createElement('option');
+            option.value = opt;
+            option.textContent = opt;
+            typeSelect.appendChild(option);
+        });
+        const otherOpt = document.createElement('option');
+        otherOpt.value = '__other__';
+        otherOpt.textContent = 'Type in defect type…';
+        typeSelect.appendChild(otherOpt);
+        typeSelect.value = currentClass || 'Defect';
+        typeSelect.addEventListener('change', (e) => {
+            e.stopPropagation();
+            const value = typeSelect.value;
+            if (value === '__other__') {
+                const custom = prompt('Enter defect type:', currentClass);
+                const newType = (custom && custom.trim()) ? custom.trim() : currentClass;
+                updateDetectionClass(detection.id, newType);
+                render();
+            } else {
+                const newType = value || 'Defect';
+                if (newType !== (detection.class || 'Defect')) {
+                    updateDetectionClass(detection.id, newType);
+                    render();
+                }
+            }
+        });
+        typeSelect.addEventListener('click', (e) => e.stopPropagation());
+        typeRow.append(typeLabel, typeSelect);
+        body.appendChild(typeRow);
 
         const actions = document.createElement('div');
         actions.className = 'detection-actions';
@@ -1343,6 +1404,7 @@ const renderViewer = () => {
         prevBtn.disabled = true;
         nextBtn.disabled = true;
         overlayLayer.innerHTML = '';
+        renderThreshold(state, null);
         renderDetectionList(state, area);
         return;
     }
@@ -1366,7 +1428,10 @@ const renderViewer = () => {
     const currentPhoto = areaPhotos[index];
 
     viewerMeta.textContent = `Photo ${index + 1} of ${areaPhotos.length} · #${currentPhoto.number}`;
-    const detectionsForPhoto = filterDetections(state, area, { photoId: currentPhoto.id });
+    const detectionsForPhoto = filterDetections(state, area, {
+        photoId: currentPhoto.id,
+        threshold: getThresholdForPhoto(state, currentPhoto.id)
+    });
     const summary = detectionsForPhoto.length
         ? `${detectionsForPhoto.length} detection${detectionsForPhoto.length === 1 ? '' : 's'}`
         : 'No detections';
@@ -1416,14 +1481,16 @@ const renderViewer = () => {
     prevBtn.disabled = singleOrNone || index === 0;
     nextBtn.disabled = singleOrNone || index === areaPhotos.length - 1;
 
+    renderThreshold(state, currentPhoto);
     renderDetectionList(state, area, currentPhoto);
 };
 
-const renderThreshold = () => {
-    const state = readState();
-    // Convert threshold from decimal (0-1) to percentage (0-100)
-    const thresholdPct = Math.round(state.analysis.threshold * 100);
-    // Ensure threshold is between 0 and 100
+const renderThreshold = (state, currentPhoto) => {
+    if (!state) state = readState();
+    // Use current image's threshold so each image has its own confidence bar value
+    const threshold =
+        currentPhoto != null ? getThresholdForPhoto(state, currentPhoto.id) : state.analysis.threshold;
+    const thresholdPct = Math.round(threshold * 100);
     const clampedPct = Math.max(0, Math.min(100, thresholdPct));
     if (thresholdSlider) {
         thresholdSlider.value = String(clampedPct);
@@ -1436,12 +1503,16 @@ const renderThreshold = () => {
 const render = () => {
     const state = readState();
     renderTabs(state);
-    renderThreshold();
     renderViewer();
 
     const totalDetections = state.detections.filter((det) => !det.falsePositive).length;
     const totalPhotos = taggedPhotos(state).length;
-    const thresholdPct = Math.max(0, Math.min(100, Math.round(state.analysis.threshold * 100)));
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = getAreaTaggedPhotos(state, area);
+    const currentPhoto = areaPhotos[state.analysis.currentPhotoIndex ?? 0];
+    const thresholdPct = currentPhoto
+        ? Math.max(0, Math.min(100, Math.round(getThresholdForPhoto(state, currentPhoto.id) * 100)))
+        : Math.max(0, Math.min(100, Math.round(state.analysis.threshold * 100)));
     updateStatus(
         'Analysis complete',
         `${totalDetections} detection${totalDetections === 1 ? '' : 's'} across ${totalPhotos} tagged photo${totalPhotos === 1 ? '' : 's'}.`,
@@ -1451,19 +1522,21 @@ const render = () => {
 
 thresholdSlider?.addEventListener('input', (event) => {
     const value = Number(event.target.value);
-    // Ensure value is between 0 and 100, then convert to decimal (0-1 range)
     const clampedValue = Math.max(0, Math.min(100, value));
     const normalized = clampedValue / 100;
-    
-    // Update threshold in state
-    setAnalysisThreshold(normalized);
-    
-    // Update display immediately for responsive feedback
+    const state = readState();
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = getAreaTaggedPhotos(state, area);
+    const currentPhoto = areaPhotos[state.analysis.currentPhotoIndex ?? 0];
+    // Update only the current image's confidence threshold so each image has its own bar
+    if (currentPhoto) {
+        setPhotoThreshold(currentPhoto.id, normalized);
+    } else {
+        setAnalysisThreshold(normalized);
+    }
     if (thresholdValue) {
         thresholdValue.textContent = `${clampedValue}%`;
     }
-    
-    // Re-render to apply the new threshold filter
     render();
 });
 

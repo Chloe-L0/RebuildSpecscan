@@ -1,4 +1,4 @@
-import { generateReportId, readState, resetState, setSubmissionId, saveInspectionToHistory, saveAllFlaggedImagesFromSession } from './state.js';
+import { generateReportId, getThresholdForPhoto, readState, resetState, setSubmissionId, saveInspectionToHistory, saveAllFlaggedImagesFromSession } from './state.js';
 import { generatePdf } from './report.js';
 
 const reportIdEl = document.getElementById('reportId');
@@ -37,10 +37,10 @@ const renderSuccess = () => {
     saveAllFlaggedImagesFromSession(state);
 
     const inspector = state.inspection.inspectorName || 'Inspector';
-    const threshold = state.analysis.threshold != null ? state.analysis.threshold : 0.01;
     const confirmedCount = state.detections.filter((detection) => {
         if (detection.falsePositive) return false;
         if (detection.manual) return true;
+        const threshold = getThresholdForPhoto(state, detection.photoId);
         return typeof detection.confidence === 'number' && detection.confidence >= threshold;
     }).length;
     reportIdEl.textContent = submissionId;

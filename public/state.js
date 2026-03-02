@@ -102,6 +102,8 @@ const DEFAULT_STATE = {
         completed: false,
         status: 'idle',
         threshold: 0.01,
+        /** Per-photo confidence threshold (0–1). Keyed by photoId. Falls back to analysis.threshold when not set. */
+        photoThresholds: {},
         currentArea: null,
         currentPhotoIndex: 0,
         error: null,
@@ -263,6 +265,21 @@ export const setAnalysisThreshold = (threshold) =>
         return draft;
     });
 
+/** Get the confidence threshold for a photo (0–1). Uses per-photo value if set, else global default. */
+export const getThresholdForPhoto = (stateSnapshot, photoId) => {
+    if (!stateSnapshot?.analysis) return 0.01;
+    const perPhoto = stateSnapshot.analysis.photoThresholds?.[photoId];
+    if (typeof perPhoto === 'number') return perPhoto;
+    return stateSnapshot.analysis.threshold != null ? stateSnapshot.analysis.threshold : 0.01;
+};
+
+export const setPhotoThreshold = (photoId, threshold) =>
+    updateState((draft) => {
+        if (!draft.analysis.photoThresholds) draft.analysis.photoThresholds = {};
+        draft.analysis.photoThresholds[photoId] = threshold;
+        return draft;
+    });
+
 export const setSubmissionId = (id) =>
     updateState((draft) => {
         draft.analysis.submissionId = id;
@@ -315,8 +332,9 @@ export const dataURLToFile = (dataURL, fileName, preferredType = 'image/jpeg') =
 };
 
 export const summarizeDetectionsByArea = (stateSnapshot = readState(), options = {}) => {
-    const { threshold } = options;
+    const { threshold: singleThreshold } = options;
     const counts = Object.fromEntries(AREAS.map((area) => [area, 0]));
+    const usePerPhotoThresholds = singleThreshold === undefined;
     stateSnapshot.detections.forEach((detection) => {
         if (detection.falsePositive) return;
         // Manual detections are always included
@@ -327,19 +345,10 @@ export const summarizeDetectionsByArea = (stateSnapshot = readState(), options =
             }
             return;
         }
-        // For confidence-based filtering: only include detections with valid confidence >= threshold
-        if (threshold !== undefined) {
-            if (typeof detection.confidence === 'number' && detection.confidence >= threshold) {
-                const photo = stateSnapshot.photos.find((p) => p.id === detection.photoId);
-                if (photo?.area && counts.hasOwnProperty(photo.area)) {
-                    counts[photo.area] += 1;
-                }
-            }
-            // Exclude detections without valid confidence when threshold is set
-            return;
-        }
-        // If no threshold specified, include all detections with valid confidence
-        if (typeof detection.confidence === 'number') {
+        const th = usePerPhotoThresholds
+            ? getThresholdForPhoto(stateSnapshot, detection.photoId)
+            : singleThreshold;
+        if (typeof detection.confidence === 'number' && detection.confidence >= th) {
             const photo = stateSnapshot.photos.find((p) => p.id === detection.photoId);
             if (photo?.area && counts.hasOwnProperty(photo.area)) {
                 counts[photo.area] += 1;
@@ -423,6 +432,17 @@ export const updateDetectionCritical = (detectionId, critical) =>
         draft.detections = draft.detections.map((detection) => {
             if (detection.id === detectionId) {
                 return { ...detection, critical: Boolean(critical) };
+            }
+            return detection;
+        });
+        return draft;
+    });
+
+export const updateDetectionClass = (detectionId, className) =>
+    updateState((draft) => {
+        draft.detections = draft.detections.map((detection) => {
+            if (detection.id === detectionId) {
+                return { ...detection, class: className != null ? String(className).trim() || 'Defect' : detection.class };
             }
             return detection;
         });

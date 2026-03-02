@@ -24,7 +24,7 @@ const FADE_IN_MS = 120;
 const FADE_OUT_MS = 120;
 const HIGHLIGHT_COLOR = new THREE.Color(0x2d5016);
 const COMPOSITE_SIZE = 512;
-const GREEN_CSS = 'rgb(45, 80, 22)'; // #2d5016
+const GREEN_CSS = 'rgb(24, 52, 5)'; // #2d5016
 const VIEWER_EXPOSURE = 2;
 
 let scene, camera, renderer, controls, model, modelBounds, directionalLight;
