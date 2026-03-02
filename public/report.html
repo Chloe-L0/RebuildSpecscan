@@ -68,6 +68,12 @@
                         <div class="report-editor-meta" id="reportEditorMeta">--</div>
                     </div>
 
+                    <div class="report-editor-heatmap report-editor-section">
+                        <h3 class="report-editor-section-title">HEATMAP OVERVIEW</h3>
+                        <p class="report-editor-heatmap-hint">Defect concentration by section. Drag to rotate.</p>
+                        <div id="report3DViewer" class="report-heatmap-viewer"></div>
+                    </div>
+
                     <div class="report-editor-findings">
                         <div class="report-editor-findings-header">
                             <h3 class="report-editor-section-title">FINDINGS</h3>
@@ -121,9 +127,6 @@
             </div>
         </section>
     </main>
-
-    <!-- Hidden 3D viewer for technical reference views in PDF -->
-    <div id="report3DViewer" style="position: absolute; width: 500px; height: 500px; left: -9999px; top: -9999px; visibility: hidden;"></div>
 
     <!-- Finding detail modal (full-resolution photo + bbox) -->
     <div class="finding-detail-modal hidden" id="findingDetailModal" role="dialog" aria-modal="true" aria-labelledby="findingDetailModalTitle">

@@ -1132,7 +1132,8 @@ const generatePdf = async (options = {}) => {
     // ========================================
     // TECHNICAL REFERENCE (new page only if needed)
     // ========================================
-    ensureSpace(pdfDoc, cursor, PDF_LAYOUT.gapSection + 28 + 120);
+    cursor.y -= 36;
+    ensureSpace(pdfDoc, cursor, PDF_LAYOUT.gapSection + 120);
     addSectionTitle('Aircraft Sectioning for Inspection Process');
     
     addSubsectionTitle('Section Color Legend');
@@ -1190,7 +1191,7 @@ const generatePdf = async (options = {}) => {
         legendX += itemWidth;
     });
     
-    cursor.y = legendY - legendLineHeight - PDF_LAYOUT.gapSubsection;
+    cursor.y = legendY - legendLineHeight - PDF_LAYOUT.gapSubsection - 20;
     addSubsectionTitle('Technical Reference Views');
     const viewSpacing = 20;
     const availableWidth = pageWidth - cursor.margin * 2;

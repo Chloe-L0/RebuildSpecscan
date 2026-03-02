@@ -9,6 +9,7 @@ let viewerContainer = null;
 let scene, camera, renderer, controls, model, sectionTextures = {}, modelBounds = null;
 let animationFrameId = null;
 let resizeHandler = null;
+let resizeObserver = null;
 let viewerReady = false;
 
 // Section name to mask filename mapping
@@ -388,72 +389,81 @@ const captureScreenshot = () => {
     return renderer.domElement.toDataURL('image/png');
 };
 
-// Capture technical reference views (Top, Side, Front)
+// Capture technical reference views (Top, Side, Front) for PDF report
+// Shorter aspect ratio (wider than tall), zoomed in
+const CAPTURE_WIDTH = 640;
+const CAPTURE_HEIGHT = 250;
+const CAPTURE_FOV = 50;
+
 const captureTechnicalViews = async () => {
     if (!viewerReady || !model || !scene || !camera || !renderer || !controls) {
         console.warn('3D viewer not ready for screenshot capture');
         return { top: null, side: null, front: null };
     }
 
-    const state = readState();
-    
-    // Store original camera state
-    const originalPosition = camera.position.clone();
-    const originalTarget = controls.target.clone();
-    const originalAutoRotate = controls.autoRotate;
-    
-    // Disable auto-rotate if active
-    controls.autoRotate = false;
-    
     // Get model bounds if not already calculated
     if (!modelBounds) {
         modelBounds = getModelBounds(model);
     }
-    
     const { center, maxDim } = modelBounds;
-    const distance = maxDim * 1.5; // Distance from model
-    
-    const views = {};
-    
+    const distance = maxDim * 1.85;
+
+    const originalPosition = camera.position.clone();
+    const originalTarget = controls.target.clone();
+    const originalAutoRotate = controls.autoRotate;
+    const originalAspect = camera.aspect;
+    const originalFov = camera.fov;
+    const originalSize = { width: renderer.domElement.width, height: renderer.domElement.height };
+
+    controls.autoRotate = false;
+
     try {
-        // Top View - Camera above looking down
+        camera.aspect = CAPTURE_WIDTH / CAPTURE_HEIGHT;
+        camera.fov = CAPTURE_FOV;
+        camera.updateProjectionMatrix();
+        renderer.setSize(CAPTURE_WIDTH, CAPTURE_HEIGHT);
+
+        const views = {};
+
         camera.position.set(center.x, center.y + distance, center.z);
         camera.lookAt(center);
         controls.target.copy(center);
         controls.update();
-        await new Promise(resolve => setTimeout(resolve, 150)); // Wait for render
+        await new Promise(resolve => setTimeout(resolve, 100));
         renderer.render(scene, camera);
         views.top = captureScreenshot();
-        
-        // Side View - Camera to the side
+
         camera.position.set(center.x + distance, center.y, center.z);
         camera.lookAt(center);
         controls.target.copy(center);
         controls.update();
-        await new Promise(resolve => setTimeout(resolve, 150));
+        await new Promise(resolve => setTimeout(resolve, 100));
         renderer.render(scene, camera);
         views.side = captureScreenshot();
-        
-        // Front View - Camera in front
+
         camera.position.set(center.x, center.y, center.z + distance);
         camera.lookAt(center);
         controls.target.copy(center);
         controls.update();
-        await new Promise(resolve => setTimeout(resolve, 150));
+        await new Promise(resolve => setTimeout(resolve, 100));
         renderer.render(scene, camera);
         views.front = captureScreenshot();
+
+        return views;
     } catch (error) {
         console.error('Error capturing technical views:', error);
+        return { top: null, side: null, front: null };
     } finally {
-        // Restore original camera state
         camera.position.copy(originalPosition);
         controls.target.copy(originalTarget);
+        camera.aspect = originalAspect;
+        camera.fov = originalFov;
+        camera.updateProjectionMatrix();
+        renderer.setSize(originalSize.width, originalSize.height);
         controls.autoRotate = originalAutoRotate;
         controls.update();
         renderer.render(scene, camera);
     }
-    
-    return views;
 };
 
 // Initialize the 3D viewer
@@ -469,28 +479,26 @@ const initViewer = async () => {
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf5f5f5);
 
-        // Set up camera
+        // Set up camera (FOV 38 for a more natural perspective, less distortion)
         const width = viewerContainer.clientWidth || 500;
-        const height = Math.max(400, viewerContainer.clientHeight || 500);
+        const height = viewerContainer.clientHeight > 0 ? viewerContainer.clientHeight : Math.max(400, viewerContainer.clientHeight || 500);
         
         if (width === 0 || height === 0) {
             console.warn('3D Viewer container has zero dimensions, using defaults');
         }
         
         console.log('3D Viewer dimensions:', width, 'x', height);
-        camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-        camera.position.set(1,1, 1);
+        camera = new THREE.PerspectiveCamera(38, width / height, 0.01, 1000);
+        camera.position.set(2.2, 1.6, 2.2);
         camera.lookAt(0, 0, 0);
 
-        // Set up renderer
+        // Set up renderer (setSize sets both buffer and display size to avoid stretch)
         renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(width, height);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.domElement.style.display = 'block';
-        renderer.domElement.style.width = '100%';
-        renderer.domElement.style.height = '100%';
         viewerContainer.innerHTML = ''; // Clear any existing content
         viewerContainer.appendChild(renderer.domElement);
+        renderer.setSize(width, height);
         
         // Show loading state
         console.log('3D Viewer renderer created and added to container');
@@ -499,8 +507,8 @@ const initViewer = async () => {
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        controls.minDistance = 0.5;
-        controls.maxDistance = 3;
+        controls.minDistance = 0.8;
+        controls.maxDistance = 6;
 
         // Add lights
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -529,6 +537,17 @@ const initViewer = async () => {
         // Add model to scene
         scene.add(model);
 
+        // Position camera at a comfortable distance (model fits in ~2 units; view from ~3.2 away)
+        const viewDistance = 3.2;
+        const viewHeight = 1.6;
+        const viewOffset = Math.sqrt(viewDistance * viewDistance - viewHeight * viewHeight) * 0.707;
+        camera.position.set(viewOffset, viewHeight, viewOffset);
+        camera.lookAt(0, 0, 0);
+        if (controls) {
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+
         // Start animation loop - render immediately even before model loads
         const animate = () => {
             animationFrameId = requestAnimationFrame(animate);
@@ -540,15 +559,20 @@ const initViewer = async () => {
         
         viewerReady = true;
 
-        // Handle window resize
-        resizeHandler = () => {
-            const newWidth = viewerContainer.clientWidth;
-            const newHeight = Math.max(400, viewerContainer.clientHeight || 400);
-            camera.aspect = newWidth / newHeight;
+        // Update renderer size and camera aspect to match container (prevents stretch when layout changes, e.g. PDF loads)
+        const updateSize = () => {
+            if (!viewerContainer || !camera || !renderer) return;
+            const w = viewerContainer.clientWidth;
+            const h = viewerContainer.clientHeight;
+            if (w <= 0 || h <= 0) return;
+            camera.aspect = w / h;
             camera.updateProjectionMatrix();
-            renderer.setSize(newWidth, newHeight);
+            renderer.setSize(w, h);
         };
+        resizeHandler = updateSize;
         window.addEventListener('resize', resizeHandler);
+        resizeObserver = new ResizeObserver(updateSize);
+        resizeObserver.observe(viewerContainer);
 
     } catch (error) {
         console.error('Failed to initialize 3D viewer:', error);
@@ -565,6 +589,10 @@ const cleanup = () => {
     }
     if (resizeHandler) {
         window.removeEventListener('resize', resizeHandler);
+    }
+    if (resizeObserver && viewerContainer) {
+        resizeObserver.unobserve(viewerContainer);
+        resizeObserver = null;
     }
     if (controls) {
         controls.dispose();
