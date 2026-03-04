@@ -241,10 +241,9 @@ logoBtn?.addEventListener('click', () => {
     const currentStep = document.body.getAttribute('data-step');
     const stepNumber = currentStep ? parseInt(currentStep, 10) : null;
     
-    if (stepNumber === 6) {
-        // Step 6 (success page) - go directly without confirmation
+    if (stepNumber === 5) {
         window.location.href = 'index.html';
-    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 5) {
+    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 4) {
         // Steps 1-5 - ask for confirmation
         if (confirm('Are you sure you want to abandon the current inspection session? All unsaved progress will be lost.')) {
             resetState();

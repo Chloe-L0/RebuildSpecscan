@@ -1,6 +1,7 @@
 import {
     AREAS,
     addManualDetection,
+    addPhotosToState,
     dataURLToFile,
     getAreaColor,
     getThresholdForPhoto,
@@ -12,6 +13,7 @@ import {
     setAnalysisThreshold,
     setCurrentAreaView,
     setCurrentPhotoIndex,
+    setPhotoArea,
     setPhotoThreshold,
     summarizeDetectionsByArea,
     toggleFalsePositive,
@@ -138,6 +140,13 @@ const saveDraftBtn = document.getElementById('saveDraftBtn');
 const flagBtn = document.getElementById('flagBtn');
 const flagBtnText = document.getElementById('flagBtnText');
 const logoBtn = document.getElementById('logoBtn');
+const resultsSidebarThumbnails = document.getElementById('resultsSidebarThumbnails');
+const resultsAddMoreBtn = document.getElementById('resultsAddMoreBtn');
+const resultsAddMoreFileInput = document.getElementById('resultsAddMoreFileInput');
+const resultsSidebarToggle = document.getElementById('resultsSidebarToggle');
+const resultsImagesPanel = document.getElementById('resultsImagesPanel');
+const resultsImagesPanelClose = document.getElementById('resultsImagesPanelClose');
+const resultsSidebarColumn = document.getElementById('resultsSidebarColumn');
 
 let activeHighlight = null;
 
@@ -669,7 +678,7 @@ const ensureTaggingComplete = () => {
         return null;
     }
     if (!state.photos.length) {
-        window.location.replace('capture.html');
+        window.location.replace('tag.html');
         return null;
     }
     const tagged = state.photos.filter((photo) => photo.area);
@@ -681,6 +690,105 @@ const ensureTaggingComplete = () => {
 };
 
 const taggedPhotos = (state) => state.photos.filter((photo) => Boolean(photo.area));
+
+// Sidebar: thumbnail list and add-more (file compression for new images)
+const RESULTS_MAX_FILE_SIZE = 12 * 1024 * 1024;
+const RESULTS_MAX_DIMENSION = 1920;
+const RESULTS_JPEG_QUALITY = 0.82;
+
+const fileToCompressedDataURL = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataURL = reader.result;
+            if (!dataURL || typeof dataURL !== 'string') {
+                reject(new Error('Could not read file'));
+                return;
+            }
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    let w = img.width;
+                    let h = img.height;
+                    if (w > RESULTS_MAX_DIMENSION || h > RESULTS_MAX_DIMENSION) {
+                        if (w >= h) {
+                            h = Math.round((h * RESULTS_MAX_DIMENSION) / w);
+                            w = RESULTS_MAX_DIMENSION;
+                        } else {
+                            w = Math.round((w * RESULTS_MAX_DIMENSION) / h);
+                            h = RESULTS_MAX_DIMENSION;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        resolve(dataURL);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const out = canvas.toDataURL('image/jpeg', RESULTS_JPEG_QUALITY);
+                    resolve(out || dataURL);
+                } catch (e) {
+                    resolve(dataURL);
+                }
+            };
+            img.onerror = () => reject(new Error('Image failed to load'));
+            img.src = dataURL;
+        };
+        reader.onerror = () => reject(reader.error || new Error('File read failed'));
+        reader.readAsDataURL(file);
+    });
+
+const isImageFileForResults = (file) => {
+    if (file.size > RESULTS_MAX_FILE_SIZE) return false;
+    if (file.type && file.type.startsWith('image/')) return true;
+    return /\.(jpe?g|png|gif|webp|bmp)$/i.test(file.name || '');
+};
+
+const renderSidebarThumbnails = () => {
+    if (!resultsSidebarThumbnails) return;
+    const state = readState();
+    const photos = taggedPhotos(state);
+    const area = state.analysis.currentArea || AREAS[0];
+    const areaPhotos = getAreaTaggedPhotos(state, area);
+    const currentIndex = state.analysis.currentPhotoIndex ?? 0;
+    const currentPhoto = areaPhotos[currentIndex] || null;
+
+    resultsSidebarThumbnails.innerHTML = '';
+
+    photos.forEach((photo) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'results-sidebar-thumb-item';
+        item.dataset.photoId = String(photo.id);
+        item.dataset.area = photo.area || '';
+        if (currentPhoto && photo.id === currentPhoto.id) {
+            item.classList.add('active');
+        }
+
+        const img = document.createElement('img');
+        img.src = photo.dataURL;
+        img.alt = `Photo #${photo.number}`;
+        const label = document.createElement('span');
+        label.className = 'results-sidebar-thumb-label' + (photo.flagged ? ' results-sidebar-thumb-label-flagged' : '');
+        label.textContent = `#${photo.number} · ${photo.area || '—'}`;
+        item.appendChild(img);
+        item.appendChild(label);
+
+        item.addEventListener('click', () => {
+            const areaForPhoto = photo.area || AREAS[0];
+            const areaPhotosForPhoto = getAreaTaggedPhotos(readState(), areaForPhoto);
+            const index = areaPhotosForPhoto.findIndex((p) => p.id === photo.id);
+            setCurrentAreaView(areaForPhoto);
+            setCurrentPhotoIndex(index >= 0 ? index : 0);
+            render();
+        });
+
+        resultsSidebarThumbnails.appendChild(item);
+    });
+};
 
 const toggleLoading = (visible) => {
     loadingState.classList.toggle('hidden', !visible);
@@ -1538,6 +1646,7 @@ const render = () => {
     const state = readState();
     renderTabs(state);
     renderViewer();
+    renderSidebarThumbnails();
 
     const totalDetections = state.detections.filter((det) => !det.falsePositive).length;
     const totalPhotos = taggedPhotos(state).length;
@@ -1604,14 +1713,98 @@ reportBtn?.addEventListener('click', () => {
     window.location.href = 'report.html';
 });
 
+// Sidebar: Add more images (assign to current area, then re-run analysis)
+const processAddMoreFiles = async (files) => {
+    if (!files || !files.length) return;
+    const valid = Array.from(files).filter(isImageFileForResults);
+    const rejected = files.length - valid.length;
+    if (!valid.length) {
+        if (rejected) alert('No valid images. Use JPEG, PNG, GIF, or WebP under 12MB.');
+        return;
+    }
+    const state = readState();
+    const beforeIds = new Set(state.photos.map((p) => p.id));
+    const currentArea = state.analysis.currentArea || AREAS[0];
+
+    try {
+        const dataURLs = await Promise.all(valid.map((f) => fileToCompressedDataURL(f)));
+        const newPhotos = dataURLs.map((dataURL, i) => ({
+            name: valid[i].name || `image_${Date.now()}_${i + 1}.jpg`,
+            dataURL
+        }));
+        addPhotosToState(newPhotos);
+        const after = readState();
+        const newIds = after.photos.filter((p) => !beforeIds.has(p.id)).map((p) => p.id);
+        if (newIds.length) {
+            setPhotoArea(newIds, currentArea);
+            await runAnalysis();
+        }
+        if (rejected > 0) alert(`${rejected} file(s) skipped. Only images up to 12MB allowed.`);
+    } catch (err) {
+        console.error('Add more images failed', err);
+        const isQuota = err && (err.name === 'QuotaExceededError' || err.code === 22);
+        alert(isQuota ? 'Storage limit reached. Try fewer or smaller images.' : (err?.message || 'Could not add images.'));
+    }
+};
+
+// Sidebar open/close (like step 1 slide-out panel)
+const openResultsImagesPanel = () => {
+    resultsSidebarColumn?.classList.add('expanded');
+    resultsImagesPanel?.setAttribute('aria-hidden', 'false');
+    resultsImagesPanel?.removeAttribute('inert');
+    resultsSidebarToggle?.setAttribute('aria-label', 'Close image list');
+    resultsSidebarToggle?.setAttribute('title', 'Close image list');
+};
+
+const closeResultsImagesPanel = () => {
+    resultsSidebarColumn?.classList.remove('expanded');
+    resultsImagesPanel?.setAttribute('aria-hidden', 'true');
+    resultsImagesPanel?.setAttribute('inert', '');
+    resultsSidebarToggle?.setAttribute('aria-label', 'Open image list');
+    resultsSidebarToggle?.setAttribute('title', 'Image list');
+    setTimeout(() => resultsSidebarToggle?.focus(), 0);
+};
+
+resultsSidebarToggle?.addEventListener('click', () => {
+    const isOpen = resultsSidebarColumn?.classList.contains('expanded');
+    if (isOpen) closeResultsImagesPanel();
+    else openResultsImagesPanel();
+});
+
+resultsImagesPanelClose?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeResultsImagesPanel();
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && resultsSidebarColumn?.classList.contains('expanded')) {
+        closeResultsImagesPanel();
+    }
+});
+
+resultsAddMoreBtn?.addEventListener('click', () => {
+    if (!resultsAddMoreFileInput) return;
+    resultsAddMoreFileInput.accept = 'image/*';
+    resultsAddMoreFileInput.removeAttribute('capture');
+    resultsAddMoreFileInput.setAttribute('multiple', 'multiple');
+    resultsAddMoreFileInput.click();
+});
+
+resultsAddMoreFileInput?.addEventListener('change', (e) => {
+    const files = e.target.files || [];
+    processAddMoreFiles(files).finally(() => {
+        if (resultsAddMoreFileInput) resultsAddMoreFileInput.value = '';
+    });
+});
+
 logoBtn?.addEventListener('click', () => {
     const currentStep = document.body.getAttribute('data-step');
     const stepNumber = currentStep ? parseInt(currentStep, 10) : null;
     
-    if (stepNumber === 6) {
-        // Step 6 (success page) - go directly without confirmation
+    if (stepNumber === 5) {
         window.location.href = 'index.html';
-    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 5) {
+    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 4) {
         // Steps 1-5 - ask for confirmation
         if (confirm('Are you sure you want to abandon the current inspection session? All unsaved progress will be lost.')) {
             resetState();

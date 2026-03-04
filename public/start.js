@@ -159,7 +159,7 @@ const handleStart = () => {
     }
 
     setInspectionDetails(payload);
-    window.location.href = 'capture.html';
+    window.location.href = 'tag.html';
 };
 
 startButton?.addEventListener('click', handleStart);

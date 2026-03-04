@@ -100,6 +100,8 @@ export async function refreshReportPreview() {
     if (!reportPreviewPages || !reportPreviewLoading) return;
     if (reportPreviewPending) reportPreviewPending.classList.add('hidden');
     reportPreviewLoading.classList.remove('hidden');
+    reportPreviewWrap?.classList.add('report-preview-generating');
+    reportPreviewWrap?.parentElement?.classList.add('report-preview-generating');
     try {
         const result = await generatePdf({ preview: true });
         if (!result || !result.blob) return;
@@ -113,12 +115,10 @@ export async function refreshReportPreview() {
         };
         reportPreviewPages.innerHTML = '';
         while (fragment.firstChild) reportPreviewPages.appendChild(fragment.firstChild);
-        const pageHeight = lastRendered.pageHeightPx || 992;
-        const wrapHeight = pageHeight + 32;
         if (reportPreviewWrap) {
-            reportPreviewWrap.style.flex = 'none';
-            reportPreviewWrap.style.height = `${wrapHeight}px`;
-            reportPreviewWrap.style.maxHeight = `${wrapHeight}px`;
+            reportPreviewWrap.style.flex = '';
+            reportPreviewWrap.style.height = '';
+            reportPreviewWrap.style.maxHeight = '';
             reportPreviewWrap.scrollTop = 0;
         }
         updatePaginationFromScroll();
@@ -128,6 +128,8 @@ export async function refreshReportPreview() {
         reportPreviewPages.innerHTML = '<p class="muted">Preview could not be generated: ' + msg + '</p>';
     } finally {
         reportPreviewLoading.classList.add('hidden');
+        reportPreviewWrap?.classList.remove('report-preview-generating');
+        reportPreviewWrap?.parentElement?.classList.remove('report-preview-generating');
     }
 }
 

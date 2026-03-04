@@ -1,7 +1,106 @@
-import { clearPhotoAreas, getAreaColor, readState, resetState, setPhotoArea } from './state.js';
+import {
+    addPhotosToState,
+    clearPhotoAreas,
+    getAreaColor,
+    readState,
+    removePhotoFromState,
+    resetState,
+    setPhotoArea
+} from './state.js';
+
+const MAX_FILE_SIZE = 12 * 1024 * 1024;
+const MAX_DIMENSION = 1920;
+const JPEG_QUALITY = 0.82;
+
+/** Load file as image and return compressed data URL. */
+const fileToCompressedDataURL = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataURL = reader.result;
+            if (!dataURL || typeof dataURL !== 'string') {
+                reject(new Error('Could not read file'));
+                return;
+            }
+            const img = new Image();
+            img.onload = () => {
+                try {
+                    let w = img.width;
+                    let h = img.height;
+                    if (w > MAX_DIMENSION || h > MAX_DIMENSION) {
+                        if (w >= h) {
+                            h = Math.round((h * MAX_DIMENSION) / w);
+                            w = MAX_DIMENSION;
+                        } else {
+                            w = Math.round((w * MAX_DIMENSION) / h);
+                            h = MAX_DIMENSION;
+                        }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        resolve(dataURL);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, w, h);
+                    const out = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+                    resolve(out || dataURL);
+                } catch (e) {
+                    resolve(dataURL);
+                }
+            };
+            img.onerror = () => reject(new Error('Image failed to load'));
+            img.src = dataURL;
+        };
+        reader.onerror = () => reject(reader.error || new Error('File read failed'));
+        reader.readAsDataURL(file);
+    });
+
+const isImageFile = (file) => {
+    if (file.size > MAX_FILE_SIZE) return false;
+    if (file.type && file.type.startsWith('image/')) return true;
+    const name = (file.name || '').toLowerCase();
+    return /\.(jpe?g|png|gif|webp|bmp)$/.test(name);
+};
+
+const processFiles = async (files) => {
+    if (!files || !files.length) return;
+    const validImages = Array.from(files).filter(isImageFile);
+    const rejected = files.length - validImages.length;
+    if (!validImages.length) {
+        if (rejected) alert('No valid images selected. Use JPEG, PNG, GIF, or WebP under 12MB.');
+        return;
+    }
+    try {
+        const conversions = await Promise.all(validImages.map((f) => fileToCompressedDataURL(f)));
+        const newPhotos = conversions.map((dataURL, i) => ({
+            name: validImages[i].name || `image_${Date.now()}_${i + 1}.jpg`,
+            dataURL
+        }));
+        addPhotosToState(newPhotos);
+        renderPhotos();
+        if (rejected > 0) {
+            alert(`${rejected} file(s) were skipped. Only image files up to 12MB are allowed.`);
+        }
+    } catch (err) {
+        console.error('Upload failed', err);
+        const isQuota = err && (err.name === 'QuotaExceededError' || err.code === 22);
+        alert(isQuota
+            ? 'Storage limit reached. Try fewer or smaller images.'
+            : (err?.message || 'Could not process the selected images.'));
+    }
+};
 
 const tagGrid = document.getElementById('tagGrid');
 const emptyState = document.getElementById('emptyTagState');
+const tagUploadZone = document.getElementById('tagUploadZone');
+const tagGridWrap = document.getElementById('tagGridWrap');
+const tagTakePhotoBtn = document.getElementById('tagTakePhotoBtn');
+const tagUploadPhotosBtn = document.getElementById('tagUploadPhotosBtn');
+const tagFileInput = document.getElementById('tagFileInput');
+const tagAddMoreBtn = document.getElementById('tagAddMoreBtn');
 const selectAllBtn = document.getElementById('selectAllBtn');
 const clearSelectionBtn = document.getElementById('clearSelectionBtn');
 const clearTagsBtn = document.getElementById('clearTagsBtn');
@@ -20,14 +119,10 @@ const selected = new Set();
 /** @type {string | null} Last clicked photo id, used as range anchor for shift-click */
 let lastClickedPhotoId = null;
 
-const ensurePhotos = () => {
+const ensureInspection = () => {
     const state = readState();
     if (!state.inspection.tailNumber || !state.inspection.startedAt) {
         window.location.replace('index.html');
-        return null;
-    }
-    if (!state.photos.length) {
-        window.location.replace('capture.html');
         return null;
     }
     return state;
@@ -208,6 +303,8 @@ const createPhotoCard = (photo) => {
     // Add tag badge or + button
     let addBtn = null;
     if (photo.area) {
+        const areaRow = document.createElement('div');
+        areaRow.className = 'tag-card-area-row';
         const areaBadge = document.createElement('span');
         areaBadge.className = 'area-badge';
         areaBadge.textContent = photo.area;
@@ -215,7 +312,17 @@ const createPhotoCard = (photo) => {
         areaBadge.style.backgroundColor = '#2d5016';
         areaBadge.style.borderColor = '#2d5016';
         areaBadge.style.color = '#ffffff';
-        footer.appendChild(areaBadge);
+        areaRow.appendChild(areaBadge);
+        // Flag indicator next to assigned area (when image was flagged on step 3)
+        if (photo.flagged) {
+            const flagSpan = document.createElement('span');
+            flagSpan.className = 'tag-card-flag-indicator';
+            flagSpan.title = 'Flagged';
+            flagSpan.setAttribute('aria-label', 'Flagged');
+            flagSpan.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
+            areaRow.appendChild(flagSpan);
+        }
+        footer.appendChild(areaRow);
     } else {
         addBtn = document.createElement('button');
         addBtn.type = 'button';
@@ -228,6 +335,15 @@ const createPhotoCard = (photo) => {
             showAssignAreaPrompt(photo.id);
         });
         footer.appendChild(addBtn);
+        // Flag indicator when no area (image was flagged on step 3)
+        if (photo.flagged) {
+            const flagSpan = document.createElement('span');
+            flagSpan.className = 'tag-card-flag-indicator';
+            flagSpan.title = 'Flagged';
+            flagSpan.setAttribute('aria-label', 'Flagged');
+            flagSpan.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>';
+            footer.appendChild(flagSpan);
+        }
     }
 
     card.append(thumb, footer);
@@ -264,19 +380,33 @@ const createPhotoCard = (photo) => {
 
 const renderPhotos = () => {
     const state = readState();
-    // Clear the grid completely
     tagGrid.innerHTML = '';
 
     if (!state.photos.length) {
-        tagGrid.classList.add('hidden');
-        emptyState.classList.remove('hidden');
+        if (tagUploadZone) {
+            tagUploadZone.classList.remove('hidden');
+            tagUploadZone.style.display = 'flex';
+        }
+        if (tagGridWrap) {
+            tagGridWrap.classList.add('hidden');
+            tagGridWrap.style.display = 'none';
+        }
+        if (emptyState) emptyState.classList.add('hidden');
         updateProgress();
         updateSelectionMeta();
+        updateNextButton();
         return;
     }
 
-    tagGrid.classList.remove('hidden');
-    emptyState.classList.add('hidden');
+    if (tagUploadZone) {
+        tagUploadZone.classList.add('hidden');
+        tagUploadZone.style.display = 'none';
+    }
+    if (tagGridWrap) {
+        tagGridWrap.classList.remove('hidden');
+        tagGridWrap.style.display = '';
+    }
+    if (emptyState) emptyState.classList.add('hidden');
 
     // Recreate all cards - this ensures selected state is properly reflected
     state.photos.forEach((photo) => {
@@ -348,24 +478,20 @@ if (clearSelectionBtn) {
 clearTagsBtn?.addEventListener('click', handleClearTags);
 
 backBtn?.addEventListener('click', () => {
-    window.location.href = 'capture.html';
+    window.location.href = 'index.html';
 });
 
 logoBtn?.addEventListener('click', () => {
     const currentStep = document.body.getAttribute('data-step');
     const stepNumber = currentStep ? parseInt(currentStep, 10) : null;
-    
-    if (stepNumber === 6) {
-        // Step 6 (success page) - go directly without confirmation
+    if (stepNumber === 5) {
         window.location.href = 'index.html';
-    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 5) {
-        // Steps 1-5 - ask for confirmation
+    } else if (stepNumber && stepNumber >= 1 && stepNumber <= 4) {
         if (confirm('Are you sure you want to abandon the current inspection session? All unsaved progress will be lost.')) {
             resetState();
             window.location.href = 'index.html';
         }
     } else {
-        // Fallback - just navigate
         window.location.href = 'index.html';
     }
 });
@@ -408,7 +534,36 @@ const initializeHotspotColors = () => {
     setupHotspotHovers();
 };
 
-const initialState = ensurePhotos();
+// Capture/upload: take photo (single), upload (multiple), add more (multiple)
+tagTakePhotoBtn?.addEventListener('click', () => {
+    if (!tagFileInput) return;
+    tagFileInput.accept = 'image/*';
+    tagFileInput.setAttribute('capture', 'environment');
+    tagFileInput.removeAttribute('multiple');
+    tagFileInput.click();
+});
+tagUploadPhotosBtn?.addEventListener('click', () => {
+    if (!tagFileInput) return;
+    tagFileInput.accept = 'image/*';
+    tagFileInput.removeAttribute('capture');
+    tagFileInput.setAttribute('multiple', 'multiple');
+    tagFileInput.click();
+});
+tagAddMoreBtn?.addEventListener('click', () => {
+    if (!tagFileInput) return;
+    tagFileInput.accept = 'image/*';
+    tagFileInput.removeAttribute('capture');
+    tagFileInput.setAttribute('multiple', 'multiple');
+    tagFileInput.click();
+});
+tagFileInput?.addEventListener('change', (e) => {
+    const files = e.target.files || [];
+    processFiles(files).finally(() => {
+        if (tagFileInput) tagFileInput.value = '';
+    });
+});
+
+const initialState = ensureInspection();
 if (initialState) {
     renderPhotos();
 }

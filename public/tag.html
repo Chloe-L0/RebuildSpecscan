@@ -15,7 +15,7 @@
     </script>
     <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
 </head>
-<body data-step="3">
+<body data-step="2">
     <!-- Header -->
     <header class="capture-header">
         <div class="header-content">
@@ -23,8 +23,8 @@
             <div class="logo" id="logoBtn" style="cursor: pointer;" title="Return to start">VERiiO</div>
             <div class="header-right">
                 <div class="step-indicator">
-                    <span class="step-label">Step 3 / 6</span>
-                    <span class="step-name">Tag Photos</span>
+                    <span class="step-label">Step 2 / 5</span>
+                    <span class="step-name">Photos & Tagging</span>
                 </div>
                 <div class="profile-icon">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -40,8 +40,8 @@
         <section class="card tag-card">
             <div class="tag-header content-top-bar">
                 <div class="tag-title-section">
-                    <h2 class="tag-title">TAG YOUR PHOTOS</h2>
-                    <p class="tag-subtitle">Link your photos to the location they are found on the aircraft.</p>
+                    <h2 class="tag-title">CAPTURE OR UPLOAD PHOTOS & TAG</h2>
+                    <p class="tag-subtitle">Add photos in the image bank, then link each to the location on the aircraft.</p>
                 </div>
                 <div class="content-actions">
                     <button class="footer-btn previous-btn" id="backBtn">PREVIOUS STEP</button>
@@ -92,11 +92,55 @@
                 <div class="tag-image-bank">
                     <div class="tag-image-bank-header">
                         <h3 class="tag-section-title">IMAGE BANK</h3>
+                        <p class="tag-image-bank-desc">Capture or upload photos here, then assign areas below.</p>
                     </div>
-                    <div class="select-grid" id="tagGrid"></div>
+                    <!-- Capture/upload zone: shown when no photos -->
+                    <div class="upload-area tag-upload-zone" id="tagUploadZone">
+                        <div class="upload-icon-container">
+                            <svg class="upload-icon" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <p class="upload-text">Take a photo or upload from your library.</p>
+                        <p class="upload-formats">JPEG, PNG, GIF, WebP — up to 12 MB</p>
+                        <div class="upload-buttons">
+                            <button class="upload-btn take-photo-btn" id="tagTakePhotoBtn" type="button">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                    <circle cx="12" cy="13" r="4"/>
+                                </svg>
+                                <span>Take Photo</span>
+                            </button>
+                            <button class="upload-btn upload-photo-btn" id="tagUploadPhotosBtn" type="button">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                <span>Upload Photo</span>
+                            </button>
+                        </div>
+                        <input type="file" id="tagFileInput" accept="image/*,image/jpeg,image/png,image/gif,image/webp" multiple class="file-input-visually-hidden">
+                    </div>
+                    <!-- Photo grid: shown when photos exist -->
+                    <div class="tag-grid-wrap hidden" id="tagGridWrap">
+                        <div class="select-grid" id="tagGrid"></div>
+                        <div class="tag-add-more-wrap">
+                            <button type="button" class="upload-btn tag-add-more-btn" id="tagAddMoreBtn">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <polyline points="17 8 12 3 7 8"/>
+                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                </svg>
+                                <span>Add more photos</span>
+                            </button>
+                        </div>
+                    </div>
                     <div class="empty-state hidden" id="emptyTagState">
                         <p>No photos available.</p>
-                        <small>Return to capture to add imagery before tagging.</small>
+                        <small>Use the buttons above to capture or upload.</small>
                     </div>
                 </div>
             </div>
