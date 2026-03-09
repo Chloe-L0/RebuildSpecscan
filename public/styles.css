@@ -1295,6 +1295,144 @@ body[data-step="7"] .capture-header {
     cursor: not-allowed;
 }
 
+.report-preview-view-switcher {
+    display: flex;
+    gap: 4px;
+    padding: 8px 16px;
+    background: #fff;
+    border-bottom: 1px solid rgba(16, 18, 26, 0.08);
+    flex-shrink: 0;
+}
+
+.report-preview-view-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 1px solid rgba(16, 18, 26, 0.12);
+    border-radius: 8px;
+    background: #fff;
+    color: #676767;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.report-preview-view-btn:hover {
+    background: rgba(176, 141, 87, 0.08);
+    border-color: rgba(176, 141, 87, 0.35);
+    color: #142741;
+}
+
+.report-preview-view-btn.active {
+    background: rgba(176, 141, 87, 0.15);
+    border-color: #b08d57;
+    color: #142741;
+}
+
+.report-preview-panel.hidden {
+    display: none !important;
+}
+
+.annotation-preview-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+.annotation-preview-wrap.hidden {
+    display: none !important;
+}
+
+.annotation-preview-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px;
+    -webkit-overflow-scrolling: touch;
+    min-height: 520px;
+    max-height: 75vh;
+}
+
+.annotation-preview-list {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+}
+
+.annotation-preview-item {
+    width: 100%;
+    max-width: 100%;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(16, 18, 26, 0.08);
+}
+
+.annotation-preview-item-section {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #676767;
+    padding: 8px 12px;
+    background: #f5f6fb;
+    border-bottom: 1px solid rgba(16, 18, 26, 0.06);
+}
+
+.annotation-preview-item-image-wrap {
+    position: relative;
+    width: 100%;
+    line-height: 0;
+    display: block;
+}
+
+.annotation-preview-item-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    vertical-align: middle;
+}
+
+.annotation-preview-item-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.annotation-preview-bbox {
+    position: absolute;
+    box-sizing: border-box;
+    border: 2px solid;
+    border-radius: 2px;
+}
+
+.annotation-preview-bbox-label {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 2px;
+    white-space: nowrap;
+    flex: none;
+}
+
+.annotation-preview-empty {
+    font-size: 14px;
+    color: #676767;
+    margin: 24px 0;
+    text-align: center;
+}
+
 .report-preview-pending {
     font-size: 13px;
     color: #3F5568;
@@ -1407,6 +1545,25 @@ body[data-step="7"] .capture-header {
     letter-spacing: 0.08em;
     color: #10121a;
     margin: 0 0 12px 0;
+}
+
+.report-editor-roboflow {
+    margin-top: 16px;
+}
+
+.report-editor-roboflow-hint {
+    font-size: 12px;
+    color: #676767;
+    margin: 0 0 10px 0;
+    line-height: 1.4;
+}
+
+.report-roboflow-format {
+    margin-bottom: 12px;
+}
+
+.report-roboflow-download-btn {
+    margin-top: 4px;
 }
 
 .report-editor-meta {

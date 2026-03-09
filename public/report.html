@@ -49,26 +49,37 @@
             </div>
 
             <div class="report-split">
-                <!-- LEFT: PDF Preview (60%) -->
-                <div class="report-preview-column">
-                    <div class="report-preview-toolbar">
-                        <div class="report-preview-nav-group">
-                            <button type="button" class="report-preview-nav-btn" id="reportPreviewPrev" aria-label="Previous page" title="Previous page">‹</button>
-                            <span class="report-preview-pagination">
-                                <label class="report-preview-page-jump">
-                                    <span class="report-preview-page-jump-label">Page</span>
-                                    <input type="number" id="reportPreviewPageInput" min="1" value="1" aria-label="Go to page number" title="Type page number and press Enter">
-                                    <span id="reportPreviewPageOf"> of </span>
-                                    <span id="reportPreviewPageCount">1</span>
-                                </label>
-                            </span>
-                            <button type="button" class="report-preview-nav-btn" id="reportPreviewNext" aria-label="Next page" title="Next page">›</button>
-                        </div>
-                        <span class="report-preview-pending hidden" id="reportPreviewPending">Preview will update…</span>
+                <!-- LEFT: PDF Preview or Annotation Preview (60%) -->
+                <div class="report-preview-column" id="reportPreviewColumn">
+                    <div class="report-preview-view-switcher">
+                        <button type="button" class="report-preview-view-btn active" id="reportViewBtn" aria-pressed="true">Report</button>
+                        <button type="button" class="report-preview-view-btn" id="annotationViewBtn" aria-pressed="false">Annotation preview</button>
                     </div>
-                    <div class="report-preview-wrap" id="reportPreviewWrap">
-                        <div class="report-preview-loading hidden" id="reportPreviewLoading">Generating preview…</div>
-                        <div class="report-preview-pages" id="reportPreviewPages"></div>
+                    <div class="report-preview-panel" id="reportPreviewPanel">
+                        <div class="report-preview-toolbar">
+                            <div class="report-preview-nav-group">
+                                <button type="button" class="report-preview-nav-btn" id="reportPreviewPrev" aria-label="Previous page" title="Previous page">‹</button>
+                                <span class="report-preview-pagination">
+                                    <label class="report-preview-page-jump">
+                                        <span class="report-preview-page-jump-label">Page</span>
+                                        <input type="number" id="reportPreviewPageInput" min="1" value="1" aria-label="Go to page number" title="Type page number and press Enter">
+                                        <span id="reportPreviewPageOf"> of </span>
+                                        <span id="reportPreviewPageCount">1</span>
+                                    </label>
+                                </span>
+                                <button type="button" class="report-preview-nav-btn" id="reportPreviewNext" aria-label="Next page" title="Next page">›</button>
+                            </div>
+                            <span class="report-preview-pending hidden" id="reportPreviewPending">Preview will update…</span>
+                        </div>
+                        <div class="report-preview-wrap" id="reportPreviewWrap">
+                            <div class="report-preview-loading hidden" id="reportPreviewLoading">Generating preview…</div>
+                            <div class="report-preview-pages" id="reportPreviewPages"></div>
+                        </div>
+                    </div>
+                    <div class="annotation-preview-wrap hidden" id="annotationPreviewWrap">
+                        <div class="annotation-preview-scroll" id="annotationPreviewScroll">
+                            <div class="annotation-preview-list" id="annotationPreviewList"></div>
+                        </div>
                     </div>
                 </div>
 
@@ -134,6 +145,16 @@
                     <div class="report-editor-actions">
                         <button type="button" class="report-generate-btn" id="generateFinalReportBtn">GENERATE FINAL REPORT</button>
                     </div>
+
+                    <div class="report-editor-section report-editor-roboflow">
+                        <h3 class="report-editor-section-title">EXPORT DATASET FOR ROBOFLOW</h3>
+                        <p class="report-editor-roboflow-hint">Download images and annotations as one ZIP for fine-tuning. Includes section (area) per image.</p>
+                        <div class="report-roboflow-format">
+                            <label class="radio-option"><input type="radio" name="roboflowFormat" value="annotations" checked><span>_annotations.json</span></label>
+                            <label class="radio-option"><input type="radio" name="roboflowFormat" value="coco"><span>COCO-style</span></label>
+                        </div>
+                        <button type="button" class="footer-btn continue-btn report-roboflow-download-btn" id="exportRoboflowBtn">DOWNLOAD DATASET (ZIP)</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -159,5 +180,7 @@
     <script type="module" src="report.js"></script>
     <script type="module" src="report-preview.js"></script>
     <script type="module" src="report-3d-viewer.js"></script>
+    <script type="module" src="export-roboflow-ui.js"></script>
+    <script type="module" src="annotation-preview.js"></script>
 </body>
 </html>
