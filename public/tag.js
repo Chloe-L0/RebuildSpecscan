@@ -214,14 +214,18 @@ const updateNextButton = () => {
             return photo.area != null && photo.area !== '';
         });
     
-    // Explicitly set disabled property
+    // Explicitly set disabled property, label, and tooltip
     if (allTagged) {
         nextBtn.disabled = false;
         nextBtn.removeAttribute('disabled');
         nextBtn.classList.remove('disabled');
+        nextBtn.textContent = 'CONTINUE TO ORGANIZE';
+        nextBtn.removeAttribute('title');
     } else {
         nextBtn.disabled = true;
         nextBtn.setAttribute('disabled', 'disabled');
+        nextBtn.textContent = 'Assign area to images';
+        nextBtn.setAttribute('title', 'Assign area to images');
     }
     nextBtn.setAttribute('aria-disabled', String(!allTagged));
 };

@@ -1,7 +1,5 @@
 import { getThresholdForPhoto, readState } from './state.js';
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { THREE, GLTFLoader, OrbitControls } from './three-shim.js';
 
 let viewerContainer = null;
 

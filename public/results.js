@@ -147,6 +147,11 @@ const resultsSidebarToggle = document.getElementById('resultsSidebarToggle');
 const resultsImagesPanel = document.getElementById('resultsImagesPanel');
 const resultsImagesPanelClose = document.getElementById('resultsImagesPanelClose');
 const resultsSidebarColumn = document.getElementById('resultsSidebarColumn');
+const assignAreaModal = document.getElementById('assignAreaModal');
+const assignAreaModalBackdrop = document.getElementById('assignAreaModalBackdrop');
+const assignAreaModalMessage = document.getElementById('assignAreaModalMessage');
+const assignAreaModalList = document.getElementById('assignAreaModalList');
+const assignAreaModalCloseBtn = document.getElementById('assignAreaModalCloseBtn');
 
 let activeHighlight = null;
 
@@ -691,6 +696,13 @@ const ensureTaggingComplete = () => {
 
 const taggedPhotos = (state) => state.photos.filter((photo) => Boolean(photo.area));
 
+/** Photos that have no area assigned (null, undefined, or empty string) */
+const getUnassignedPhotos = (state) =>
+    state.photos.filter((photo) => {
+        const hasArea = photo.area && (typeof photo.area === 'string' ? photo.area.trim() !== '' : Boolean(photo.area));
+        return !hasArea;
+    });
+
 // Sidebar: thumbnail list and add-more (file compression for new images)
 const RESULTS_MAX_FILE_SIZE = 12 * 1024 * 1024;
 const RESULTS_MAX_DIMENSION = 1920;
@@ -813,8 +825,82 @@ const updateStatus = (title, subtitle, meta) => {
     }
 };
 
+/** Populate the assign-area modal with unassigned photos and area dropdowns; show modal */
+const renderAssignAreaModalContent = () => {
+    if (!assignAreaModalList) return;
+    const state = readState();
+    const unassigned = getUnassignedPhotos(state);
+    assignAreaModalList.innerHTML = '';
+    if (unassigned.length === 0) {
+        closeAssignAreaModal();
+        render();
+        return;
+    }
+    unassigned.forEach((photo) => {
+        const row = document.createElement('div');
+        row.className = 'assign-area-modal-row';
+        const thumb = document.createElement('img');
+        thumb.className = 'assign-area-modal-thumb';
+        thumb.src = photo.dataURL || '';
+        thumb.alt = `Photo #${photo.number}`;
+        const label = document.createElement('span');
+        label.className = 'assign-area-modal-label';
+        label.textContent = `Photo #${photo.number} · ${(photo.name || '').replace(/\.[^/.]+$/, '') || 'Image'}`;
+        const select = document.createElement('select');
+        select.className = 'assign-area-modal-select';
+        select.setAttribute('aria-label', `Area for photo ${photo.number}`);
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = '— Select area —';
+        select.appendChild(placeholder);
+        AREAS.forEach((area) => {
+            const opt = document.createElement('option');
+            opt.value = area;
+            opt.textContent = area;
+            select.appendChild(opt);
+        });
+        select.addEventListener('change', () => {
+            const area = select.value;
+            if (!area) return;
+            setPhotoArea([photo.id], area);
+            renderAssignAreaModalContent();
+        });
+        row.appendChild(thumb);
+        row.appendChild(label);
+        row.appendChild(select);
+        assignAreaModalList.appendChild(row);
+    });
+};
+
+/** Show modal with list of unassigned photos so user can assign area in-page */
+const showAssignAreaModal = (unassignedCount) => {
+    if (!assignAreaModal) return;
+    const unassigned = getUnassignedPhotos(readState());
+    const n = unassignedCount ?? unassigned.length;
+    if (n === 0) return;
+    if (assignAreaModalMessage) {
+        assignAreaModalMessage.textContent = `Select an area for each photo below before continuing to verify detections.`;
+    }
+    renderAssignAreaModalContent();
+    if (getUnassignedPhotos(readState()).length > 0) {
+        assignAreaModal.classList.remove('hidden');
+        assignAreaModal.setAttribute('aria-hidden', 'false');
+    }
+};
+
+const closeAssignAreaModal = () => {
+    if (!assignAreaModal) return;
+    assignAreaModal.classList.add('hidden');
+    assignAreaModal.setAttribute('aria-hidden', 'true');
+};
+
 const runAnalysis = async () => {
     const state = readState();
+    const unassigned = getUnassignedPhotos(state);
+    if (unassigned.length > 0) {
+        showAssignAreaModal(unassigned.length);
+        return;
+    }
     const photos = taggedPhotos(state);
     toggleLoading(true);
     updateStatus('Running analysis…', 'Roboflow is processing uploaded imagery.', `${photos.length} photo(s)`);
@@ -1713,7 +1799,7 @@ reportBtn?.addEventListener('click', () => {
     window.location.href = 'report.html';
 });
 
-// Sidebar: Add more images (assign to current area, then re-run analysis)
+// Sidebar: Add more images (do not auto-assign area; user must assign before verifying)
 const processAddMoreFiles = async (files) => {
     if (!files || !files.length) return;
     const valid = Array.from(files).filter(isImageFileForResults);
@@ -1724,7 +1810,6 @@ const processAddMoreFiles = async (files) => {
     }
     const state = readState();
     const beforeIds = new Set(state.photos.map((p) => p.id));
-    const currentArea = state.analysis.currentArea || AREAS[0];
 
     try {
         const dataURLs = await Promise.all(valid.map((f) => fileToCompressedDataURL(f)));
@@ -1736,8 +1821,8 @@ const processAddMoreFiles = async (files) => {
         const after = readState();
         const newIds = after.photos.filter((p) => !beforeIds.has(p.id)).map((p) => p.id);
         if (newIds.length) {
-            setPhotoArea(newIds, currentArea);
-            await runAnalysis();
+            showAssignAreaModal(newIds.length);
+            render();
         }
         if (rejected > 0) alert(`${rejected} file(s) skipped. Only images up to 12MB allowed.`);
     } catch (err) {
@@ -1778,7 +1863,10 @@ resultsImagesPanelClose?.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && resultsSidebarColumn?.classList.contains('expanded')) {
+    if (e.key !== 'Escape') return;
+    if (assignAreaModal && !assignAreaModal.classList.contains('hidden')) {
+        closeAssignAreaModal();
+    } else if (resultsSidebarColumn?.classList.contains('expanded')) {
         closeResultsImagesPanel();
     }
 });
@@ -1797,6 +1885,9 @@ resultsAddMoreFileInput?.addEventListener('change', (e) => {
         if (resultsAddMoreFileInput) resultsAddMoreFileInput.value = '';
     });
 });
+
+assignAreaModalCloseBtn?.addEventListener('click', closeAssignAreaModal);
+assignAreaModalBackdrop?.addEventListener('click', closeAssignAreaModal);
 
 logoBtn?.addEventListener('click', () => {
     const currentStep = document.body.getAttribute('data-step');

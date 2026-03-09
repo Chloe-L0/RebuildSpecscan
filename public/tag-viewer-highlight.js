@@ -5,9 +5,7 @@
  * Does not modify report-3d-viewer.js.
  */
 
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { THREE, GLTFLoader, OrbitControls } from './three-shim.js';
 
 const SECTION_MASK_MAP = {
     'FWD Fuselage': 'FWDFuselage.png',

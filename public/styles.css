@@ -1161,6 +1161,9 @@ body[data-step="7"] .capture-header {
     padding: 40px;
     width: 100%;
     max-width: 1400px;
+    display: flex;
+    flex-direction: column;
+    min-height: 70vh;
     min-width: min(100%, 1400px);
     margin: 0 auto;
     display: flex;
@@ -1182,7 +1185,8 @@ body[data-step="7"] .capture-header {
     display: grid;
     grid-template-columns: minmax(380px, 60%) 1fr;
     gap: 24px;
-    min-height: 70vh;
+    flex: 1;
+    min-height: 0;
     align-items: start;
 }
 
@@ -4029,6 +4033,39 @@ body.capture-page {
     margin-bottom: 8px;
 }
 
+.report-footer.content-bottom-bar,
+.tag-footer.content-bottom-bar,
+.results-footer.content-bottom-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(16, 18, 26, 0.08);
+}
+
+.content-bottom-bar .content-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.results-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 70vh;
+}
+
+.results-card #resultsContent {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
 .results-card-top.content-top-bar {
     margin-bottom: 16px;
 }
@@ -4095,6 +4132,15 @@ body.capture-page {
     .content-top-bar .content-actions .footer-btn {
         width: 100%;
     }
+
+    .content-bottom-bar .content-actions {
+        width: 100%;
+        flex-direction: column;
+    }
+
+    .content-bottom-bar .content-actions .footer-btn {
+        width: 100%;
+    }
 }
 
 /* ========================================
@@ -4139,6 +4185,9 @@ body[data-step="3"] .capture-header {
     padding: 40px;
     max-width: 1400px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 70vh;
 }
 
 .tag-header {
@@ -4169,6 +4218,8 @@ body[data-step="3"] .capture-header {
     grid-template-columns: 500px 1fr;
     gap: 40px;
     margin-bottom: 40px;
+    flex: 1;
+    min-height: 0;
 }
 
 .tag-assign-area {
@@ -4600,7 +4651,9 @@ body[data-step="3"] .capture-header {
     grid-template-columns: auto 1fr;
     gap: 0;
     margin-top: 24px;
-    align-items: start;
+    align-items: stretch;
+    height: calc(100vh - 140px);
+    min-height: 400px;
 }
 
 /* Column: narrow when closed, expands to reveal panel (masked), no overlay */
@@ -4613,7 +4666,7 @@ body[data-step="3"] .capture-header {
     flex-direction: row;
     align-items: stretch;
     align-self: stretch;
-    min-height: 400px;
+    min-height: 0;
 }
 
 .results-sidebar-column.expanded {
@@ -4665,13 +4718,13 @@ body[data-step="3"] .capture-header {
     letter-spacing: 0.02em;
 }
 
-/* Panel: beside strip, revealed when column has .expanded (masked expand) */
+/* Panel: beside strip, revealed when column has .expanded (masked expand); height matches left section */
 .results-images-panel {
     width: 300px;
     min-width: 300px;
     flex-shrink: 0;
     height: 100%;
-    min-height: calc(100vh - 120px);
+    min-height: 0;
     background: #ffffff;
     border: 1px solid rgba(0, 0, 0, 0.08);
     border-left: none;
@@ -4738,7 +4791,8 @@ body[data-step="3"] .capture-header {
 
 .results-images-panel .results-sidebar-thumbnails {
     flex: 1;
-    min-height: 120px;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .results-images-panel-backdrop {
@@ -4778,7 +4832,7 @@ body[data-step="3"] .capture-header {
     gap: 8px;
     overflow-y: auto;
     flex: 1;
-    min-height: 120px;
+    min-height: 0;
 }
 
 .results-sidebar-thumb-item {
@@ -4860,11 +4914,140 @@ body[data-step="3"] .capture-header {
     flex-shrink: 0;
 }
 
+/* Assign area required modal (step 3: new images added or unassigned before verify) */
+.assign-area-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+.assign-area-modal.hidden {
+    display: none !important;
+}
+
+.assign-area-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    cursor: pointer;
+}
+
+.assign-area-modal-box {
+    position: relative;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.25);
+    max-width: min(96vw, 420px);
+    padding: 24px;
+}
+
+.assign-area-modal-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0 0 12px 0;
+    color: #10121a;
+}
+
+.assign-area-modal-message {
+    font-size: 14px;
+    color: #374151;
+    margin: 0 0 16px 0;
+    line-height: 1.5;
+}
+
+.assign-area-modal-list {
+    max-height: 40vh;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.assign-area-modal-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.assign-area-modal-row:last-child {
+    border-bottom: none;
+}
+
+.assign-area-modal-thumb {
+    width: 56px;
+    height: 42px;
+    object-fit: cover;
+    border-radius: 6px;
+    flex-shrink: 0;
+    background: #f3f4f6;
+}
+
+.assign-area-modal-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    color: #374151;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.assign-area-modal-select {
+    flex-shrink: 0;
+    min-width: 160px;
+    padding: 8px 12px;
+    font-size: 13px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #fff;
+    color: #10121a;
+    cursor: pointer;
+}
+
+.assign-area-modal-select:hover {
+    border-color: #B08D57;
+}
+
+.assign-area-modal-select:focus {
+    outline: none;
+    border-color: #B08D57;
+    box-shadow: 0 0 0 2px rgba(176, 141, 87, 0.25);
+}
+
+.assign-area-modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.assign-area-modal-actions .footer-btn.secondary {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+}
+
+.assign-area-modal-actions .footer-btn.secondary:hover {
+    background: #e5e7eb;
+}
+
 .results-main-grid {
     display: grid;
     grid-template-columns: 1.4fr 1fr;
     gap: 40px;
     min-width: 0;
+    align-items: stretch;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
 }
 
 .results-left-section {
@@ -4951,6 +5134,8 @@ body[data-step="3"] .capture-header {
     display: flex;
     flex-direction: column;
     gap: 24px;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .analysis-summary {
@@ -5029,6 +5214,17 @@ body[data-step="3"] .capture-header {
     display: flex;
     flex-direction: column;
     min-width: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.results-right-section .detection-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Responsive adjustments */

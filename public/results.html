@@ -28,13 +28,9 @@
     </header>
 
     <main class="shell">
-        <section class="card">
+        <section class="card results-card">
             <div class="content-top-bar results-card-top" id="resultsCardTop">
                 <h2 class="verify-title">VERIFY DETECTIONS</h2>
-                <div class="content-actions">
-                    <button class="footer-btn previous-btn" id="reorganizeBtn">PREVIOUS STEP</button>
-                    <button class="footer-btn continue-btn" id="reportBtn">CONTINUE TO REPORT</button>
-                </div>
             </div>
             <div class="loading hidden" id="loadingState">
                 <div class="spinner"></div>
@@ -44,9 +40,9 @@
             <div id="resultsContent" class="hidden">
                 <div class="results-with-sidebar">
                     <!-- Column that expands to reveal panel (masked), no overlay -->
-                    <div class="results-sidebar-column" id="resultsSidebarColumn">
+                    <div class="results-sidebar-column expanded" id="resultsSidebarColumn">
                         <nav class="results-nav-strip" id="resultsNavStrip" aria-label="Images menu">
-                            <button type="button" class="results-nav-strip-btn" id="resultsSidebarToggle" aria-label="Open image list" title="Image list">
+                            <button type="button" class="results-nav-strip-btn" id="resultsSidebarToggle" aria-label="Close image list" title="Close image list">
                                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                                     <rect x="3" y="3" width="7" height="7" rx="1"/>
                                     <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -56,7 +52,7 @@
                                 <span class="results-nav-strip-label">Images</span>
                             </button>
                         </nav>
-                        <aside class="results-images-panel" id="resultsImagesPanel" aria-hidden="true" inert>
+                        <aside class="results-images-panel" id="resultsImagesPanel" aria-hidden="false">
                             <div class="results-images-panel-header">
                                 <h3 class="results-images-panel-title">Images</h3>
                                 <button type="button" class="results-images-panel-close" id="resultsImagesPanelClose" aria-label="Close">×</button>
@@ -132,6 +128,26 @@
                         </div>
                     </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Assign area popup: assign area to unassigned photos without leaving step 3 -->
+            <div class="assign-area-modal hidden" id="assignAreaModal" role="dialog" aria-modal="true" aria-labelledby="assignAreaModalTitle">
+                <div class="assign-area-modal-backdrop" id="assignAreaModalBackdrop"></div>
+                <div class="assign-area-modal-box">
+                    <h2 class="assign-area-modal-title" id="assignAreaModalTitle">Assign area to all photos</h2>
+                    <p class="assign-area-modal-message" id="assignAreaModalMessage">Select an area for each photo below before continuing to verify detections.</p>
+                    <div class="assign-area-modal-list" id="assignAreaModalList"></div>
+                    <div class="assign-area-modal-actions">
+                        <button type="button" class="footer-btn secondary" id="assignAreaModalCloseBtn">Close</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-footer content-bottom-bar">
+                <div class="content-actions">
+                    <button class="footer-btn previous-btn" id="reorganizeBtn">PREVIOUS STEP</button>
+                    <button class="footer-btn continue-btn" id="reportBtn">CONTINUE TO REPORT</button>
                 </div>
             </div>
         </section>
