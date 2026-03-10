@@ -4652,8 +4652,7 @@ body[data-step="3"] .capture-header {
     gap: 0;
     margin-top: 24px;
     align-items: stretch;
-    height: calc(100vh - 140px);
-    min-height: 400px;
+    min-height: max(400px, calc(100vh - 140px));
 }
 
 /* Column: narrow when closed, expands to reveal panel (masked), no overlay */
@@ -5046,8 +5045,7 @@ body[data-step="3"] .capture-header {
     min-width: 0;
     align-items: stretch;
     min-height: 0;
-    height: 100%;
-    overflow: hidden;
+    align-self: stretch;
 }
 
 .results-left-section {
