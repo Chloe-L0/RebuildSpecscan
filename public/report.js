@@ -13,6 +13,7 @@ import {
     saveGeneralNoteToStorage,
     saveInspectionToHistory
 } from './state.js';
+import { showToast } from './toast.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 import { PDFDocument, StandardFonts, rgb } from 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm';
 
@@ -1150,67 +1151,11 @@ const generatePdf = async (options = {}) => {
     cursor.y -= 36;
     ensureSpace(pdfDoc, cursor, PDF_LAYOUT.gapSection + 120);
     addSectionTitle('Aircraft Sectioning for Inspection Process');
-    
-    addSubsectionTitle('Section Color Legend');
-    ensureSpace(pdfDoc, cursor, 100);
-    
-    // Color legend entries with exact hex values
-    const sectionColors = [
-        { name: 'FWD Fuselage', color: [20, 184, 166] },   // Teal #14B8A6
-        { name: 'MID Fuselage', color: [16, 185, 129] },   // Green #10B981
-        { name: 'Wings', color: [59, 130, 246] },          // Blue #3B82F6
-        { name: 'AFT Fuselage', color: [239, 68, 68] },    // Red #EF4444
-        { name: 'Engines', color: [168, 85, 247] },        // Purple #A855F7
-        { name: 'Vertical Stabilizer', color: [249, 115, 22] }, // Orange #F97316
-        { name: 'Horizontal Stabilizer', color: [234, 179, 8] } // Yellow #EAB308
-    ];
-    
-    let legendX = cursor.margin;
-    let legendY = cursor.y;
-    const legendLineHeight = 16;
-    const legendBoxSize = 20; // Increased to 20px
-    const legendSpacing = 8; // Space between entries
-    const itemsPerRow = 3;
-    const itemWidth = 180; // Width per item including box and text
-    
-    sectionColors.forEach((section, idx) => {
-        if (idx > 0 && idx % itemsPerRow === 0) {
-            legendY -= legendLineHeight + 4;
-            legendX = cursor.margin;
-        }
-        
-        // Color box (20x20px)
-        cursor.page.drawRectangle({
-            x: legendX,
-            y: legendY - legendBoxSize,
-            width: legendBoxSize,
-            height: legendBoxSize,
-            color: rgb(
-                section.color[0] / 255,
-                section.color[1] / 255,
-                section.color[2] / 255
-            ),
-            borderColor: rgb(0.1, 0.1, 0.1),
-            borderWidth: 0.5
-        });
-        
-        // Section name
-        cursor.page.drawText(section.name, {
-            x: legendX + legendBoxSize + 8,
-            y: legendY - 2,
-            size: 9,
-            font: fonts.regular,
-            color: rgb(0.1, 0.1, 0.1)
-        });
-        
-        legendX += itemWidth;
-    });
-    
-    cursor.y = legendY - legendLineHeight - PDF_LAYOUT.gapSubsection - 20;
     addSubsectionTitle('Technical Reference Views');
     const viewSpacing = 20;
     const availableWidth = pageWidth - cursor.margin * 2;
-    const viewWidth = Math.min(300, Math.floor((availableWidth - viewSpacing * 2) / 3));
+    const VIEW_IMAGE_SCALE = 2;
+    const viewWidth = Math.min(300 * VIEW_IMAGE_SCALE, Math.floor((availableWidth - viewSpacing * 2) / 3));
     const viewHeightTarget = Math.round(viewWidth * (200 / 300));
     ensureSpace(pdfDoc, cursor, viewHeightTarget + 60);
 
@@ -1825,7 +1770,7 @@ generateFinalReportBtn?.addEventListener('click', async () => {
         window.location.href = 'success.html';
     } catch (error) {
         console.error('PDF generation failed', error);
-        alert(error.message || 'Unable to generate PDF. Please try again.');
+        showToast(error.message || 'Unable to generate PDF. Please try again.', { type: 'error' });
     } finally {
         btn.disabled = false;
         btn.textContent = originalLabel;

@@ -8,6 +8,7 @@ import {
     readState,
     recordDetections,
     removeDetection,
+    removePhotoFromState,
     resetState,
     setAnalysisStatus,
     setAnalysisThreshold,
@@ -23,6 +24,7 @@ import {
     updateDetectionClass,
     updateDetectionNote
 } from './state.js';
+import { showToast } from './toast.js';
 import { createCroppedThumbnail, THUMBNAIL_HEIGHT } from './thumbnails.js';
 
 /** Default defect type options for manual detection and for changing type on cards */
@@ -759,6 +761,58 @@ const isImageFileForResults = (file) => {
     return /\.(jpe?g|png|gif|webp|bmp)$/i.test(file.name || '');
 };
 
+const showConfirmRemovePhotoDialog = () =>
+    new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-modal-backdrop';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'confirm-modal';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const title = document.createElement('h3');
+        title.className = 'confirm-modal-title';
+        title.textContent = 'Remove this photo?';
+
+        const message = document.createElement('p');
+        message.className = 'confirm-modal-message';
+        message.textContent = 'This cannot be undone.';
+
+        const actions = document.createElement('div');
+        actions.className = 'confirm-modal-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'footer-btn secondary';
+        cancelBtn.textContent = 'Cancel';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'footer-btn continue-btn';
+        removeBtn.textContent = 'Remove Photo';
+
+        const cleanup = (result) => {
+            overlay.remove();
+            resolve(result);
+        };
+
+        cancelBtn.addEventListener('click', () => cleanup(false));
+        removeBtn.addEventListener('click', () => cleanup(true));
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) cleanup(false);
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') cleanup(false);
+        }, { once: true });
+
+        actions.append(cancelBtn, removeBtn);
+        dialog.append(title, message, actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        cancelBtn.focus();
+    });
+
 const renderSidebarThumbnails = () => {
     if (!resultsSidebarThumbnails) return;
     const state = readState();
@@ -771,6 +825,10 @@ const renderSidebarThumbnails = () => {
     resultsSidebarThumbnails.innerHTML = '';
 
     photos.forEach((photo) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'results-sidebar-thumb-wrap';
+        wrap.dataset.photoId = String(photo.id);
+
         const item = document.createElement('button');
         item.type = 'button';
         item.className = 'results-sidebar-thumb-item';
@@ -798,13 +856,42 @@ const renderSidebarThumbnails = () => {
             render();
         });
 
-        resultsSidebarThumbnails.appendChild(item);
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'results-sidebar-thumb-delete';
+        deleteBtn.setAttribute('aria-label', 'Remove photo');
+        deleteBtn.setAttribute('title', 'Remove photo');
+        deleteBtn.innerHTML = '×';
+        deleteBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const shouldRemove = await showConfirmRemovePhotoDialog();
+            if (!shouldRemove) return;
+            removePhotoFromState(photo.id);
+            const nextState = readState();
+            const nextAreaPhotos = getAreaTaggedPhotos(nextState, area);
+            const nextIndex = Math.min(currentIndex >= nextAreaPhotos.length ? nextAreaPhotos.length - 1 : currentIndex, Math.max(0, nextAreaPhotos.length - 1));
+            setCurrentPhotoIndex(Math.max(0, nextIndex));
+            setCurrentAreaView(nextAreaPhotos.length ? area : (nextState.photos.find((p) => p.area)?.area || AREAS[0]));
+            render();
+        });
+
+        wrap.appendChild(item);
+        wrap.appendChild(deleteBtn);
+        resultsSidebarThumbnails.appendChild(wrap);
     });
 };
 
 const toggleLoading = (visible) => {
-    loadingState.classList.toggle('hidden', !visible);
-    resultsContent.classList.toggle('hidden', visible);
+    if (visible) {
+        loadingState.classList.remove('hidden');
+        loadingState.setAttribute('aria-busy', 'true');
+        resultsContent.classList.remove('results-content--visible');
+    } else {
+        resultsContent.classList.add('results-content--visible');
+        loadingState.setAttribute('aria-busy', 'false');
+        loadingState.classList.add('hidden');
+    }
 };
 
 const updateStatus = (title, subtitle, meta) => {
@@ -1003,7 +1090,7 @@ const runAnalysis = async () => {
             error.message || 'Something went wrong while contacting Roboflow.',
             'Retry from Tag step'
         );
-        alert(error.message || 'Analysis failed. Please verify your Roboflow configuration.');
+        showToast(error.message || 'Analysis failed. Please verify your Roboflow configuration.', { type: 'error' });
     }
 };
 
@@ -1805,7 +1892,7 @@ const processAddMoreFiles = async (files) => {
     const valid = Array.from(files).filter(isImageFileForResults);
     const rejected = files.length - valid.length;
     if (!valid.length) {
-        if (rejected) alert('No valid images. Use JPEG, PNG, GIF, or WebP under 12MB.');
+        if (rejected) showToast('No valid images. Use JPEG, PNG, GIF, or WebP under 12MB.', { type: 'warning' });
         return;
     }
     const state = readState();
@@ -1824,11 +1911,11 @@ const processAddMoreFiles = async (files) => {
             showAssignAreaModal(newIds.length);
             render();
         }
-        if (rejected > 0) alert(`${rejected} file(s) skipped. Only images up to 12MB allowed.`);
+        if (rejected > 0) showToast(`${rejected} file(s) skipped. Only images up to 12MB allowed.`, { type: 'warning' });
     } catch (err) {
         console.error('Add more images failed', err);
         const isQuota = err && (err.name === 'QuotaExceededError' || err.code === 22);
-        alert(isQuota ? 'Storage limit reached. Try fewer or smaller images.' : (err?.message || 'Could not add images.'));
+        showToast(isQuota ? 'Storage limit reached. Try fewer or smaller images.' : (err?.message || 'Could not add images.'), { type: 'error' });
     }
 };
 
@@ -1913,7 +2000,7 @@ startOverBtn?.addEventListener('click', () => {
 });
 
 saveDraftBtn?.addEventListener('click', () => {
-    alert('Draft saved locally. Submit or export from the Report step to finalize.');
+    showToast('Draft saved locally. Submit or export from the Report step to finalize.', { type: 'info' });
 });
 
 // Flag button handler

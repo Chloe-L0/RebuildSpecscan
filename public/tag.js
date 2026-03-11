@@ -7,6 +7,7 @@ import {
     resetState,
     setPhotoArea
 } from './state.js';
+import { showToast } from './toast.js';
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
 const MAX_DIMENSION = 1920;
@@ -70,7 +71,7 @@ const processFiles = async (files) => {
     const validImages = Array.from(files).filter(isImageFile);
     const rejected = files.length - validImages.length;
     if (!validImages.length) {
-        if (rejected) alert('No valid images selected. Use JPEG, PNG, GIF, or WebP under 12MB.');
+        if (rejected) showToast('No valid images selected. Use JPEG, PNG, GIF, or WebP under 12MB.', { type: 'warning' });
         return;
     }
     try {
@@ -82,14 +83,14 @@ const processFiles = async (files) => {
         addPhotosToState(newPhotos);
         renderPhotos();
         if (rejected > 0) {
-            alert(`${rejected} file(s) were skipped. Only image files up to 12MB are allowed.`);
+            showToast(`${rejected} file(s) were skipped. Only image files up to 12MB are allowed.`, { type: 'warning' });
         }
     } catch (err) {
         console.error('Upload failed', err);
         const isQuota = err && (err.name === 'QuotaExceededError' || err.code === 22);
-        alert(isQuota
+        showToast(isQuota
             ? 'Storage limit reached. Try fewer or smaller images.'
-            : (err?.message || 'Could not process the selected images.'));
+            : (err?.message || 'Could not process the selected images.'), { type: 'error' });
     }
 };
 
@@ -242,6 +243,58 @@ const toggleSelection = (photoId, forceState) => {
 const HINT_DURATION_MS = 1000;
 const HINT_FADE_MS = 200;
 
+const showConfirmRemovePhotoDialog = () =>
+    new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.className = 'confirm-modal-backdrop';
+
+        const dialog = document.createElement('div');
+        dialog.className = 'confirm-modal';
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const title = document.createElement('h3');
+        title.className = 'confirm-modal-title';
+        title.textContent = 'Remove this photo?';
+
+        const message = document.createElement('p');
+        message.className = 'confirm-modal-message';
+        message.textContent = 'This cannot be undone.';
+
+        const actions = document.createElement('div');
+        actions.className = 'confirm-modal-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'footer-btn secondary';
+        cancelBtn.textContent = 'Cancel';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.className = 'footer-btn continue-btn';
+        removeBtn.textContent = 'Remove Photo';
+
+        const cleanup = (result) => {
+            overlay.remove();
+            resolve(result);
+        };
+
+        cancelBtn.addEventListener('click', () => cleanup(false));
+        removeBtn.addEventListener('click', () => cleanup(true));
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) cleanup(false);
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') cleanup(false);
+        }, { once: true });
+
+        actions.append(cancelBtn, removeBtn);
+        dialog.append(title, message, actions);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        cancelBtn.focus();
+    });
+
 /** Show "Please assign area" next to the + button and outline the hotspot toolbar for 1s with fade in/out */
 const showAssignAreaPrompt = (photoId) => {
     const card = tagGrid?.querySelector(`[data-photo-id="${photoId}"]`);
@@ -295,6 +348,26 @@ const createPhotoCard = (photo) => {
     thumb.className = 'photo-thumb';
     thumb.src = photo.dataURL;
     thumb.alt = photo.name;
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'photo-delete-btn';
+    deleteBtn.setAttribute('aria-label', 'Remove photo');
+    deleteBtn.setAttribute('title', 'Remove photo');
+    deleteBtn.innerHTML = '×';
+    deleteBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const shouldRemove = await showConfirmRemovePhotoDialog();
+        if (!shouldRemove) return;
+        card.classList.add('removing');
+        setTimeout(() => {
+            removePhotoFromState(photo.id);
+            selected.delete(photo.id);
+            if (lastClickedPhotoId === photo.id) lastClickedPhotoId = null;
+            renderPhotos();
+        }, 220);
+    });
 
     const footer = document.createElement('footer');
     const photoNumber = document.createElement('span');
@@ -350,10 +423,11 @@ const createPhotoCard = (photo) => {
         }
     }
 
-    card.append(thumb, footer);
-    
+    card.append(thumb, deleteBtn, footer);
+
     // Add click handler for card selection (single toggle, or shift-click range)
     const handleCardClick = (event) => {
+        if (event.target.closest('.photo-delete-btn')) return;
         if (addBtn && (event.target === addBtn || event.target.closest('.tag-add-btn'))) return;
         const state = readState();
         const photos = state.photos;
@@ -512,12 +586,12 @@ nextBtn?.addEventListener('click', (e) => {
     });
     
     if (unassigned.length) {
-        alert(`Assign an area to all photos before continuing. ${unassigned.length} photo${unassigned.length === 1 ? '' : 's'} still unassigned.`);
+        showToast(`Assign an area to all photos before continuing. ${unassigned.length} photo${unassigned.length === 1 ? '' : 's'} still unassigned.`, { type: 'warning' });
         updateNextButton(); // Update button state
         return;
     }
     if (state.photos.length === 0) {
-        alert('Please add photos before continuing.');
+        showToast('Please add photos before continuing.', { type: 'warning' });
         return;
     }
     

@@ -5,6 +5,7 @@ import {
     removePhotoFromState,
     resetState
 } from './state.js';
+import { showToast } from './toast.js';
 
 const MAX_FILE_SIZE = 12 * 1024 * 1024;
 
@@ -178,7 +179,7 @@ const processFiles = async (files) => {
     const rejected = files.length - validImages.length;
     if (!validImages.length) {
         if (rejected) {
-            alert('No valid images selected. Use JPEG, PNG, GIF, or WebP under 12MB.');
+            showToast('No valid images selected. Use JPEG, PNG, GIF, or WebP under 12MB.', { type: 'warning' });
         }
         return;
     }
@@ -193,7 +194,7 @@ const processFiles = async (files) => {
         renderPhotos();
 
         if (rejected > 0) {
-            alert(`${rejected} file(s) were skipped. Only image files up to 12MB are allowed.`);
+            showToast(`${rejected} file(s) were skipped. Only image files up to 12MB are allowed.`, { type: 'warning' });
         }
     } catch (err) {
         console.error('Upload failed', err);
@@ -201,7 +202,7 @@ const processFiles = async (files) => {
         const msg = isQuota
             ? 'Storage limit reached. Try fewer or smaller images.'
             : (err?.message || 'Could not process the selected images. Try different files or smaller sizes.');
-        alert(msg);
+        showToast(msg, { type: 'error' });
     }
 };
 

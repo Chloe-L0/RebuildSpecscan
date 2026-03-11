@@ -1,5 +1,6 @@
 import { generateReportId, getThresholdForPhoto, readState, resetState, setSubmissionId, saveInspectionToHistory, saveAllFlaggedImagesFromSession } from './state.js';
 import { generatePdf } from './report.js';
+import { showToast } from './toast.js';
 
 const reportIdEl = document.getElementById('reportId');
 const successMeta = document.getElementById('successMeta');
@@ -55,7 +56,7 @@ downloadPdfBtn?.addEventListener('click', async () => {
         await generatePdf();
     } catch (error) {
         console.error('PDF generation failed', error);
-        alert(error.message || 'Unable to generate PDF. Please try again.');
+        showToast(error.message || 'Unable to generate PDF. Please try again.', { type: 'error' });
     } finally {
         downloadPdfBtn.disabled = false;
         downloadPdfBtn.textContent = originalLabel;

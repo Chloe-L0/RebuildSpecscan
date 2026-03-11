@@ -7,6 +7,29 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body data-step="3">
+    <script>
+        (function(){function r(){requestAnimationFrame(function(){requestAnimationFrame(function(){document.body.classList.add('page-ready');});});}
+        if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',r);else r();})();
+    </script>
+    <nav class="sidebar-nav">
+        <button class="nav-icon" title="Info"><span class="icon-text">ii</span></button>
+        <button type="button" class="nav-icon" id="clipboardNavBtn" title="General Notes" aria-label="Open general notes">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg>
+        </button>
+        <button type="button" class="nav-icon" id="historyNavBtn" title="Inspection History" aria-label="Open inspection history">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        </button>
+        <button type="button" class="nav-icon" id="bookmarkNavBtn" title="Bookmarks" aria-label="Open bookmarks">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        </button>
+        <button type="button" class="nav-icon" id="flaggedImagesNavBtn" title="Flagged Images" aria-label="Open flagged images">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>
+        </button>
+        <button class="nav-icon nav-back" title="Back">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </button>
+    </nav>
+    <div class="app-content-wrap">
     <!-- Header -->
     <header class="capture-header">
         <div class="header-content">
@@ -32,12 +55,12 @@
             <div class="content-top-bar results-card-top" id="resultsCardTop">
                 <h2 class="verify-title">VERIFY DETECTIONS</h2>
             </div>
-            <div class="loading hidden" id="loadingState">
-                <div class="spinner"></div>
-                <p>Running inference with Roboflow…</p>
-            </div>
-
-            <div id="resultsContent" class="hidden">
+            <div class="results-card-body">
+                <div class="loading loading-overlay hidden" id="loadingState" aria-live="polite" aria-busy="false">
+                    <div class="spinner"></div>
+                    <p>Running inference with Roboflow…</p>
+                </div>
+                <div id="resultsContent" class="results-content">
                 <div class="results-with-sidebar">
                     <!-- Column that expands to reveal panel (masked), no overlay -->
                     <div class="results-sidebar-column expanded" id="resultsSidebarColumn">
@@ -85,7 +108,7 @@
                         
                         <!-- Image Viewer -->
                         <div class="viewer">
-                            <div class="viewer-meta">
+                            <div class="viewer-meta viewer-meta-top">
                                 <span id="viewerMeta">Photo --</span>
                                 <div class="button-row">
                                     <button class="secondary" id="prevBtn">Previous</button>
@@ -98,20 +121,20 @@
                                         <span id="flagBtnText">Flag Image</span>
                                     </button>
                                 </div>
+                                <div class="viewer-meta-confidence">
+                                    <div class="slider-group">
+                                        <label for="thresholdSlider">Confidence</label>
+                                        <input type="range" id="thresholdSlider" min="0" max="100" value="1">
+                                        <span id="thresholdValue">1%</span>
+                                    </div>
+                                    <div class="muted" id="viewerSummary"></div>
+                                </div>
                                 <p class="viewer-drag-hint">You can drag on the image to add defects manually.</p>
                             </div>
                             <div class="viewer-stage">
                                 <img id="resultImage" alt="Inspection result">
                                 <div class="overlay-layer" id="overlayLayer"></div>
                                 <div class="no-image-message hidden" id="noImageMessage">No image assigned</div>
-                            </div>
-                            <div class="viewer-meta">
-                                <div class="slider-group">
-                                    <label for="thresholdSlider">Confidence</label>
-                                    <input type="range" id="thresholdSlider" min="0" max="100" value="1">
-                                    <span id="thresholdValue">1%</span>
-                                </div>
-                                <div class="muted" id="viewerSummary"></div>
                             </div>
                         </div>
                     </div>
@@ -129,6 +152,7 @@
                     </div>
                     </div>
                 </div>
+                </div>
             </div>
 
             <!-- Assign area popup: assign area to unassigned photos without leaving step 3 -->
@@ -144,7 +168,7 @@
                 </div>
             </div>
 
-            <div class="results-footer content-bottom-bar">
+            <div class="results-footer content-bottom-bar sticky-bottom-bar">
                 <div class="content-actions">
                     <button class="footer-btn previous-btn" id="reorganizeBtn">PREVIOUS STEP</button>
                     <button class="footer-btn continue-btn" id="reportBtn">CONTINUE TO REPORT</button>
@@ -152,8 +176,68 @@
             </div>
         </section>
     </main>
+    </div>
+
+    <aside id="historyPanel" class="history-panel" aria-hidden="true">
+        <div class="history-panel-header">
+            <h2 class="history-panel-title">Inspection History</h2>
+            <button type="button" class="history-panel-close" id="historyPanelClose" aria-label="Close">×</button>
+        </div>
+        <div class="history-panel-search-wrap">
+            <input type="text" id="historySearch" class="history-panel-search" placeholder="Search by tail number or date…" autocomplete="off">
+        </div>
+        <div class="history-panel-list" id="historyList"></div>
+        <div class="history-empty hidden" id="historyEmpty">
+            <p class="history-empty-title">No inspections yet</p>
+            <p class="history-empty-desc">Complete your first inspection to see it here.</p>
+        </div>
+    </aside>
+    <div class="history-panel-backdrop hidden" id="historyBackdrop" aria-hidden="true"></div>
+    <aside id="bookmarkPanel" class="history-panel" aria-hidden="true">
+        <div class="history-panel-header">
+            <h2 class="history-panel-title">Bookmarks</h2>
+            <button type="button" class="history-panel-close" id="bookmarkPanelClose" aria-label="Close">×</button>
+        </div>
+        <div class="history-panel-list" id="bookmarkList"></div>
+        <div class="history-empty hidden" id="bookmarkEmpty">
+            <p class="history-empty-title">No bookmarks yet</p>
+            <p class="history-empty-desc">Open Inspection History and bookmark sessions to see them here.</p>
+        </div>
+    </aside>
+    <div class="history-panel-backdrop hidden" id="bookmarkBackdrop" aria-hidden="true"></div>
+    <aside id="flaggedImagesPanel" class="history-panel" aria-hidden="true">
+        <div class="history-panel-header">
+            <h2 class="history-panel-title">Flagged Images</h2>
+            <button type="button" class="history-panel-close" id="flaggedImagesPanelClose" aria-label="Close">×</button>
+        </div>
+        <div class="history-panel-search-wrap">
+            <input type="text" id="flaggedImagesSearch" class="history-panel-search" placeholder="Search by area or note…" autocomplete="off">
+        </div>
+        <div class="history-panel-list" id="flaggedImagesList"></div>
+        <div class="history-empty hidden" id="flaggedImagesEmpty">
+            <p class="history-empty-title">No flagged images yet</p>
+            <p class="history-empty-desc">Flag images in step 3 to see them here.</p>
+        </div>
+    </aside>
+    <div class="history-panel-backdrop hidden" id="flaggedImagesBackdrop" aria-hidden="true"></div>
+    <aside id="clipboardPanel" class="history-panel" aria-hidden="true">
+        <div class="history-panel-header">
+            <h2 class="history-panel-title">General Notes</h2>
+            <button type="button" class="history-panel-close" id="clipboardPanelClose" aria-label="Close">×</button>
+        </div>
+        <div class="history-panel-search-wrap">
+            <input type="text" id="clipboardSearch" class="history-panel-search" placeholder="Search notes by content or tail number…" autocomplete="off">
+        </div>
+        <div class="history-panel-list" id="clipboardList"></div>
+        <div class="history-empty hidden" id="clipboardEmpty">
+            <p class="history-empty-title">No notes yet</p>
+            <p class="history-empty-desc">Add notes in step 5 to see them here.</p>
+        </div>
+    </aside>
+    <div class="history-panel-backdrop hidden" id="clipboardBackdrop" aria-hidden="true"></div>
 
     <script type="module" src="state.js"></script>
+    <script type="module" src="sidebar.js"></script>
     <script type="module" src="results.js"></script>
 </body>
 </html>
